@@ -1,0 +1,1467 @@
+{
+	"components": {
+		"examples": {},
+		"headers": {},
+		"parameters": {},
+		"requestBodies": {},
+		"responses": {},
+		"schemas": {
+			"DriverResponse": {
+				"description": "Driver information response",
+				"properties": {
+					"id": {
+						"type": "string",
+						"description": "Unique driver identifier (UUID)"
+					},
+					"name": {
+						"type": "string",
+						"description": "Driver's full name"
+					},
+					"phone": {
+						"type": "string",
+						"description": "Phone number"
+					},
+					"vehicleType": {
+						"type": "string",
+						"description": "Vehicle type: 'bike', 'scooter', or 'car'"
+					},
+					"status": {
+						"type": "string",
+						"description": "Current driver status: 'offline', 'available', 'en_route_pickup', 'at_pickup', 'en_route_delivery', 'at_delivery'"
+					},
+					"maxOrders": {
+						"type": "number",
+						"format": "double",
+						"description": "Maximum concurrent orders"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"phone",
+					"vehicleType",
+					"status",
+					"maxOrders"
+				],
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"id": "550e8400-e29b-41d4-a716-446655440000",
+					"name": "John Doe",
+					"phone": "+1234567890",
+					"vehicleType": "bike",
+					"status": "available",
+					"maxOrders": 3
+				}
+			},
+			"CreateDriverRequest": {
+				"description": "Request body for creating a new driver",
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "Driver's full name"
+					},
+					"phone": {
+						"type": "string",
+						"description": "Phone number with country code (e.g., +1234567890)"
+					},
+					"vehicleType": {
+						"type": "string",
+						"description": "Type of vehicle: 'bike', 'scooter', or 'car'"
+					},
+					"maxOrders": {
+						"type": "number",
+						"format": "double",
+						"description": "Maximum number of concurrent orders (default: 3)"
+					},
+					"initialLocation": {
+						"properties": {
+							"lng": {
+								"type": "number",
+								"format": "double",
+								"description": "Longitude coordinate"
+							},
+							"lat": {
+								"type": "number",
+								"format": "double",
+								"description": "Latitude coordinate"
+							}
+						},
+						"required": [
+							"lng",
+							"lat"
+						],
+						"type": "object",
+						"description": "Initial GPS location of the driver"
+					}
+				},
+				"required": [
+					"name",
+					"phone",
+					"vehicleType"
+				],
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"name": "John Doe",
+					"phone": "+1234567890",
+					"vehicleType": "bike",
+					"maxOrders": 3,
+					"initialLocation": {
+						"lat": 37.7749,
+						"lng": -122.4194
+					}
+				}
+			},
+			"UpdateLocationRequest": {
+				"description": "Request body for updating driver's GPS location",
+				"properties": {
+					"lat": {
+						"type": "number",
+						"format": "double",
+						"description": "Latitude coordinate (-90 to 90)"
+					},
+					"lng": {
+						"type": "number",
+						"format": "double",
+						"description": "Longitude coordinate (-180 to 180)"
+					},
+					"heading": {
+						"type": "number",
+						"format": "double",
+						"description": "Compass heading in degrees (0-360, optional)"
+					},
+					"speed": {
+						"type": "number",
+						"format": "double",
+						"description": "Speed in km/h (optional)"
+					}
+				},
+				"required": [
+					"lat",
+					"lng"
+				],
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"lat": 37.7749,
+					"lng": -122.4194,
+					"heading": 90,
+					"speed": 15.5
+				}
+			},
+			"UpdateStatusRequest": {
+				"description": "Request body for updating driver status",
+				"properties": {
+					"status": {
+						"type": "string",
+						"description": "New driver status: 'offline', 'available', 'en_route_pickup', 'at_pickup', 'en_route_delivery', 'at_delivery'"
+					}
+				},
+				"required": [
+					"status"
+				],
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"status": "available"
+				}
+			},
+			"RouteAssignment": {
+				"description": "Route assignment information for an order",
+				"properties": {
+					"assignmentId": {
+						"type": "string"
+					},
+					"orderId": {
+						"type": "string"
+					},
+					"sequence": {
+						"type": "number",
+						"format": "double"
+					},
+					"estimatedPickup": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"estimatedDelivery": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"actualPickup": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"actualDelivery": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"pickupLat": {
+						"type": "number",
+						"format": "double"
+					},
+					"pickupLng": {
+						"type": "number",
+						"format": "double"
+					},
+					"pickupAddress": {
+						"type": "string"
+					},
+					"dropoffLat": {
+						"type": "number",
+						"format": "double"
+					},
+					"dropoffLng": {
+						"type": "number",
+						"format": "double"
+					},
+					"dropoffAddress": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"assignmentId",
+					"orderId",
+					"sequence",
+					"estimatedPickup",
+					"estimatedDelivery",
+					"pickupLat",
+					"pickupLng",
+					"pickupAddress",
+					"dropoffLat",
+					"dropoffLng",
+					"dropoffAddress",
+					"status"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"DriverRouteResponse": {
+				"description": "Driver route response with all assigned orders",
+				"properties": {
+					"driverId": {
+						"type": "string"
+					},
+					"driverName": {
+						"type": "string"
+					},
+					"driverStatus": {
+						"type": "string"
+					},
+					"totalAssignments": {
+						"type": "number",
+						"format": "double"
+					},
+					"assignments": {
+						"items": {
+							"$ref": "#/components/schemas/RouteAssignment"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"driverId",
+					"driverName",
+					"driverStatus",
+					"totalAssignments",
+					"assignments"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"RouteInfo": {
+				"properties": {
+					"driverId": {
+						"type": "string"
+					},
+					"driverName": {
+						"type": "string"
+					},
+					"orderCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"totalDistance": {
+						"type": "number",
+						"format": "double"
+					},
+					"distancePerOrder": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"driverId",
+					"driverName",
+					"orderCount",
+					"totalDistance",
+					"distancePerOrder"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"MatchingResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"message": {
+						"type": "string"
+					},
+					"routes": {
+						"items": {
+							"$ref": "#/components/schemas/RouteInfo"
+						},
+						"type": "array"
+					},
+					"summary": {
+						"properties": {
+							"timestamp": {
+								"type": "string"
+							},
+							"computationTimeMs": {
+								"type": "number",
+								"format": "double"
+							},
+							"totalDistance": {
+								"type": "number",
+								"format": "double"
+							},
+							"totalAssigned": {
+								"type": "number",
+								"format": "double"
+							},
+							"totalOrders": {
+								"type": "number",
+								"format": "double"
+							},
+							"totalRoutes": {
+								"type": "number",
+								"format": "double"
+							}
+						},
+						"required": [
+							"timestamp",
+							"computationTimeMs",
+							"totalDistance",
+							"totalAssigned",
+							"totalOrders",
+							"totalRoutes"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"message",
+					"routes",
+					"summary"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"OrderResponse": {
+				"description": "Order information response",
+				"properties": {
+					"id": {
+						"type": "string",
+						"description": "Unique order identifier (UUID)"
+					},
+					"pickupLat": {
+						"type": "number",
+						"format": "double",
+						"description": "Pickup latitude coordinate"
+					},
+					"pickupLng": {
+						"type": "number",
+						"format": "double",
+						"description": "Pickup longitude coordinate"
+					},
+					"pickupAddress": {
+						"type": "string",
+						"description": "Pickup address"
+					},
+					"dropoffLat": {
+						"type": "number",
+						"format": "double",
+						"description": "Dropoff latitude coordinate"
+					},
+					"dropoffLng": {
+						"type": "number",
+						"format": "double",
+						"description": "Dropoff longitude coordinate"
+					},
+					"dropoffAddress": {
+						"type": "string",
+						"description": "Dropoff address"
+					},
+					"requestedDeliveryDate": {
+						"type": "string",
+						"format": "date-time",
+						"description": "Requested delivery date (system will generate optimal time window)"
+					},
+					"preferredTimeSlot": {
+						"type": "string",
+						"description": "Optional time preference: morning, afternoon, evening"
+					},
+					"status": {
+						"type": "string",
+						"description": "Order status: 'pending', 'assigned', 'picked_up', 'delivered', 'cancelled'"
+					},
+					"priority": {
+						"type": "number",
+						"format": "double",
+						"description": "Order priority (1-10)"
+					},
+					"value": {
+						"type": "number",
+						"format": "double",
+						"description": "Order value in dollars"
+					},
+					"driverId": {
+						"type": "string",
+						"description": "Assigned driver ID (if assigned)"
+					}
+				},
+				"required": [
+					"id",
+					"pickupLat",
+					"pickupLng",
+					"pickupAddress",
+					"dropoffLat",
+					"dropoffLng",
+					"dropoffAddress",
+					"requestedDeliveryDate",
+					"status",
+					"priority",
+					"value"
+				],
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"id": "550e8400-e29b-41d4-a716-446655440000",
+					"pickupLat": 37.7749,
+					"pickupLng": -122.4194,
+					"pickupAddress": "123 Market St, San Francisco, CA",
+					"dropoffLat": 37.7849,
+					"dropoffLng": -122.4094,
+					"dropoffAddress": "456 Mission St, San Francisco, CA",
+					"requestedDeliveryDate": "2024-11-17",
+					"preferredTimeSlot": "morning",
+					"status": "pending",
+					"priority": 5,
+					"value": 15.99,
+					"driverId": "660e8400-e29b-41d4-a716-446655440001"
+				}
+			},
+			"CreateOrderRequest": {
+				"description": "Request body for creating a new order\nSystem will generate optimal time window after route optimization",
+				"properties": {
+					"pickupLocation": {
+						"properties": {
+							"lng": {
+								"type": "number",
+								"format": "double",
+								"description": "Pickup longitude"
+							},
+							"lat": {
+								"type": "number",
+								"format": "double",
+								"description": "Pickup latitude"
+							}
+						},
+						"required": [
+							"lng",
+							"lat"
+						],
+						"type": "object",
+						"description": "Pickup GPS coordinates"
+					},
+					"pickupAddress": {
+						"type": "string",
+						"description": "Human-readable pickup address"
+					},
+					"dropoffLocation": {
+						"properties": {
+							"lng": {
+								"type": "number",
+								"format": "double",
+								"description": "Dropoff longitude"
+							},
+							"lat": {
+								"type": "number",
+								"format": "double",
+								"description": "Dropoff latitude"
+							}
+						},
+						"required": [
+							"lng",
+							"lat"
+						],
+						"type": "object",
+						"description": "Dropoff GPS coordinates"
+					},
+					"dropoffAddress": {
+						"type": "string",
+						"description": "Human-readable dropoff address"
+					},
+					"requestedDeliveryDate": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "string",
+								"format": "date-time"
+							}
+						],
+						"description": "Requested delivery date (ISO 8601 date format: YYYY-MM-DD) - system will generate specific time window"
+					},
+					"preferredTimeSlot": {
+						"type": "string",
+						"description": "Optional time preference: \"morning\" | \"afternoon\" | \"evening\" | omit for flexible"
+					},
+					"priority": {
+						"type": "number",
+						"format": "double",
+						"description": "Order priority (1-10, higher is more urgent, default: 5)"
+					},
+					"value": {
+						"type": "number",
+						"format": "double",
+						"description": "Order value in dollars (for revenue tracking)"
+					}
+				},
+				"required": [
+					"pickupLocation",
+					"pickupAddress",
+					"dropoffLocation",
+					"dropoffAddress",
+					"requestedDeliveryDate"
+				],
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"pickupLocation": {
+						"lat": 37.7749,
+						"lng": -122.4194
+					},
+					"pickupAddress": "123 Market St, San Francisco, CA",
+					"dropoffLocation": {
+						"lat": 37.7849,
+						"lng": -122.4094
+					},
+					"dropoffAddress": "456 Mission St, San Francisco, CA",
+					"requestedDeliveryDate": "2024-11-17",
+					"preferredTimeSlot": "morning",
+					"priority": 5,
+					"value": 15.99
+				}
+			}
+		},
+		"securitySchemes": {}
+	},
+	"info": {
+		"title": "EdgeRun API",
+		"version": "1.0.0",
+		"description": "EdgeRun Last-Mile Delivery API - MVP for food delivery driver-order matching",
+		"license": {
+			"name": {
+				"name": "MIT"
+			}
+		},
+		"contact": {
+			"name": "EdgeRun Support"
+		}
+	},
+	"openapi": "3.0.0",
+	"paths": {
+		"/drivers": {
+			"post": {
+				"operationId": "CreateDriver",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DriverResponse"
+								}
+							}
+						}
+					},
+					"201": {
+						"description": "Driver created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DriverResponse"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Drivers"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateDriverRequest"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/drivers/{id}/location": {
+			"post": {
+				"operationId": "UpdateLocation",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"message"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Drivers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateLocationRequest"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/drivers/{id}/status": {
+			"patch": {
+				"operationId": "UpdateStatus",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DriverResponse"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Drivers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateStatusRequest"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/drivers/{id}": {
+			"get": {
+				"operationId": "GetDriver",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DriverResponse"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Driver not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Drivers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/drivers/{id}/assignments/offered": {
+			"get": {
+				"operationId": "GetOfferedAssignments",
+				"responses": {
+					"200": {
+						"description": "Array of offered assignments",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/RouteAssignment"
+									},
+									"type": "array"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Driver not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Get offered assignments for a driver (pending response)\nReturns all assignments with OFFERED status",
+				"tags": [
+					"Drivers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Driver ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/drivers/assignments/{id}/accept": {
+			"post": {
+				"operationId": "AcceptAssignment",
+				"responses": {
+					"200": {
+						"description": "Success message with updated assignment",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"assignment": {},
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"assignment",
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Invalid state transition",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Assignment not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Accept an offered assignment",
+				"tags": [
+					"Drivers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Assignment ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/drivers/assignments/{id}/reject": {
+			"post": {
+				"operationId": "RejectAssignment",
+				"responses": {
+					"200": {
+						"description": "Success message",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Invalid state transition",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Assignment not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Reject an offered assignment",
+				"tags": [
+					"Drivers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Assignment ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Rejection reason (optional)",
+					"required": false,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"reason": {
+										"type": "string"
+									}
+								},
+								"type": "object",
+								"description": "Rejection reason (optional)"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/drivers/{id}/route": {
+			"get": {
+				"operationId": "GetDriverRoute",
+				"responses": {
+					"200": {
+						"description": "DriverRouteResponse with all assignments and order details",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DriverRouteResponse"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Driver not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Get the current delivery route for a driver\nReturns all active (non-delivered) orders assigned to the driver in sequence order",
+				"tags": [
+					"Drivers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Driver ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/matching/optimize": {
+			"post": {
+				"operationId": "OptimizeMatching",
+				"responses": {
+					"200": {
+						"description": "MatchingResponse with optimized routes and metrics",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MatchingResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "No pending orders or available drivers",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "Matching engine error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Execute the divide-and-conquer matching engine\n\nTriggers the three-stage matching algorithm to:\n- Assign all pending orders to available drivers\n- Optimize delivery routes for each driver\n- Return detailed route information and metrics",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Include detailed route waypoints in response (default: false)",
+						"in": "query",
+						"name": "verbose",
+						"required": false,
+						"schema": {
+							"default": false,
+							"type": "boolean"
+						}
+					}
+				]
+			}
+		},
+		"/matching/draft": {
+			"post": {
+				"operationId": "TriggerDraft",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"count": {
+											"type": "number",
+											"format": "double"
+										},
+										"drafts": {
+											"items": {},
+											"type": "array"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"count",
+										"drafts",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "TESTING: Manual draft trigger\nRuns Phase 1 (Draft) of the assignment lifecycle",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "round",
+						"required": false,
+						"schema": {
+							"default": 1,
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/matching/offer": {
+			"post": {
+				"operationId": "TriggerOffer",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"created": {
+											"type": "number",
+											"format": "double"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"created",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "TESTING: Manual offer trigger\nRuns Phase 2 (Offer) - persists last draft as OFFERED assignments",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "round",
+						"required": false,
+						"schema": {
+							"default": 1,
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/matching/process": {
+			"post": {
+				"operationId": "TriggerProcess",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"expired": {
+											"type": "number",
+											"format": "double"
+										},
+										"rejected": {
+											"type": "number",
+											"format": "double"
+										},
+										"accepted": {
+											"type": "number",
+											"format": "double"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"expired",
+										"rejected",
+										"accepted",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "TESTING: Manual process trigger\nRuns Phase 4 (Process) - expires stale offers and collects responses",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/matching/expire-stale": {
+			"post": {
+				"operationId": "ExpireStale",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"expired": {
+											"type": "number",
+											"format": "double"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"expired",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "TESTING: Manual expire stale offers\nExpires all OFFERED assignments past their expiration time",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/matching/cycle": {
+			"post": {
+				"operationId": "RunCycle",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "TESTING: Run full matching cycle\nRuns the complete draft→offer loop (pauses for manual testing)",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/matching/health": {
+			"get": {
+				"operationId": "HealthCheck",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"status": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Health check for matching service",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/orders": {
+			"post": {
+				"operationId": "CreateOrder",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrderResponse"
+								}
+							}
+						}
+					},
+					"201": {
+						"description": "Order created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrderResponse"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Orders"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateOrderRequest"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/orders/{id}": {
+			"get": {
+				"operationId": "GetOrder",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrderResponse"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Order not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Orders"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		}
+	},
+	"servers": [
+		{
+			"url": "/api"
+		}
+	]
+}

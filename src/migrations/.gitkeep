@@ -1,0 +1,4 @@
+# Migrations directory
+# TypeORM will generate migration files here
+# Run: npm run migration:generate to create migrations from entities
+# Run: npm run migration:run to apply migrations

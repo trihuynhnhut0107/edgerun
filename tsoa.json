@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "entryFile": "src/index.ts",
+  "noImplicitAdditionalProperties": "throw-on-extras",
+  "outputDirectory": "src/generated",
+  "controllerPathGlobs": ["src/controllers/**/*.controller.ts"],
+  "routes": {
+    "basePath": "/api",
+    "routesDir": "src/generated",
+    "routesFileName": "routes.ts",
+    "middleware": "express"
+  },
+  "spec": {
+    "outputDirectory": "src/generated",
+    "specFileBaseName": "swagger",
+    "specVersion": 3,
+    "basePath": "/api",
+    "contact": {
+      "name": "EdgeRun Support"
+    },
+    "description": "EdgeRun Last-Mile Delivery API - MVP for food delivery driver-order matching",
+    "license": {
+      "name": "MIT"
+    },
+    "name": "EdgeRun API",
+    "version": "1.0.0"
+  },
+  "swagger": {
+    "outputDirectory": "src/generated",
+    "entryFile": "./src/index.ts"
+  }
+}
