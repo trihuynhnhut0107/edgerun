@@ -1,437 +1,1012 @@
-# BÁO CÁO KHOA HỌC: HỆ THỐNG BACK-END CHO GIAO HÀNG CHẶNG CUỐI (LAST-MILE DELIVERY)
+# Draft Phase Implementation Plan - EdgeRun Matching Engine
 
-## MỞ ĐẦU (Problem Statement)
+## Executive Summary
 
-**1. Lý do chọn đề tài:**
-Trong kỷ nguyên thương mại điện tử bùng nổ, logistics và đặc biệt là giao hàng chặng cuối (last-mile delivery) đóng vai trò then chốt trong sự thành công của chuỗi cung ứng. Chi phí cho chặng cuối thường chiếm tới 53% tổng chi phí vận chuyển. Sự thiếu hiệu quả trong việc điều phối tài xế, tối ưu hóa lộ trình và xử lý các đơn hàng theo thời gian thực dẫn đến lãng phí nguồn lực, tăng chi phí và giảm sự hài lòng của khách hàng. Việc xây dựng một hệ thống Back-end thông minh có khả năng tự động phân phối đơn hàng và tối ưu lộ trình là nhu cầu cấp thiết.
+This plan outlines the implementation of a database-persisted draft assignment system for the EdgeRun matching engine, replacing the current in-memory `DraftMemory` approach. The new system will use **Clarke-Wright Savings Algorithm + ALNS (Adaptive Large Neighborhood Search)** to optimize driver-order assignments with 90-99% optimal solution quality in under 2.5 seconds.
 
-**2. Mục đích nghiên cứu:**
-Phát triển một hệ thống Back-end ("Edgerun") có khả năng:
-
-- Tự động gán đơn hàng cho tài xế phù hợp nhất dựa trên vị trí và trạng thái.
-- Tối ưu hóa lộ trình giao nhận cho từng tài xế, hỗ trợ ghép đơn (batching) để tăng hiệu suất.
-- Đảm bảo các ràng buộc về thời gian (time windows) và thứ tự giao nhận (precedence constraints).
-
-**3. Đối tượng và phạm vi nghiên cứu:**
-
-- **Đối tượng:** Các thuật toán định tuyến xe (VRP - Vehicle Routing Problem), đặc biệt là VRP với Pick-up and Delivery (VRPPD).
-- **Phạm vi:**
-  - Hệ thống Back-end xử lý logic nghiệp vụ và tính toán.
-  - Tập trung vào giao hàng nội thành (urban delivery) với xe máy/xe tải nhỏ.
-  - Dữ liệu địa lý và định tuyến dựa trên Mapbox.
+**Key Changes:**
+- Replace in-memory `DraftMemory` with database-persisted `DraftAssignments` entity
+- Implement Clarke-Wright Savings algorithm for route construction (85-95% optimal, <150ms)
+- Add ALNS metaheuristic for route improvement (95-99% optimal, 1-2s)
+- Implement distance matrix caching to reduce Mapbox API costs by 80-90%
+- Use Mapbox Matrix API for batch distance calculations
+- Store multiple draft groups for comparison and selection
 
 ---
 
-## TỔNG QUAN (Literature Review)
+## 1. Database Schema Design
 
-**1. Các hướng nghiên cứu hiện có:**
-Bài toán định tuyến giao hàng chặng cuối đã được nghiên cứu rộng rãi dưới dạng Vehicle Routing Problem (VRP).
+### 1.1 DraftAssignments Entity
 
-- **VRPPD (Pickup and Delivery):** Desaulniers & Desrosiers đã đặt nền móng cho các công thức VRPPD, nơi xe phải nhận hàng tại điểm A và giao tại điểm B.
-- **VRPTW (Time Windows):** Mở rộng của VRP thêm ràng buộc khung thời gian phục vụ khách hàng.
-- **Dynamic VRP:** Xử lý các yêu cầu phát sinh theo thời gian thực, không biết trước.
+```typescript
+@Entity('draft_assignments')
+export class DraftAssignment {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-**2. Đánh giá các phương pháp:**
+  @Column({ name: 'draft_group_id' })
+  draftGroupId: number; // Identifies complete assignment solution (1, 2, 3, ...)
 
-- **Giải thuật chính xác (Exact Methods):** Như Branch-and-Cut, cho kết quả tối ưu nhưng không khả thi với số lượng điểm lớn (>50) do độ phức tạp NP-khó.
-- **Metaheuristics:**
-  - **Hybrid Genetic Search (HGS):** Hiện là state-of-the-art cho VRP, cân bằng giữa đa dạng (diversity) và chất lượng (quality).
-  - **Large Neighborhood Search (LNS):** Hiệu quả trong việc cải thiện cục bộ bằng cách phá hủy và tái tạo một phần lời giải.
-  - **Tabu Search & Simulated Annealing:** Các phương pháp cổ điển giúp thoát khỏi cực trị địa phương.
+  @Column({ name: 'driver_id' })
+  driverId: string;
 
-**3. Vấn đề tồn tại và hướng tập trung của đề tài:**
-Nhiều nghiên cứu chỉ tập trung vào lý thuyết toán học thuần túy hoặc mô phỏng. Các hệ thống thực tế (như DoorDash, Uber) thường kết hợp nhiều phương pháp dự báo phức tạp. Tuy nhiên, để đảm bảo tính khả thi và hiệu quả cho quy mô vừa và nhỏ, đề tài này áp dụng hướng tiếp cận **Stochastic Optimization (Tối ưu hóa ngẫu nhiên)** dựa trên nghiên cứu của **Hosseini và cộng sự (2025)**. Thay vì phụ thuộc vào các mô hình Deep Learning "hộp đen" tốn kém tài nguyên, hệ thống sử dụng phương pháp **Stochastic SAA** để phân tích dữ liệu lịch sử và xác định cửa sổ thời gian tin cậy.
+  @Column({ name: 'order_id' })
+  orderId: string;
+
+  @Column()
+  sequence: number; // Position in driver's route (1, 2, 3, ...)
+
+  @Column({ type: 'timestamp' })
+  estimatedPickupTime: Date;
+
+  @Column({ type: 'timestamp' })
+  estimatedDeliveryTime: Date;
+
+  @Column({ type: 'float' })
+  travelTimeToPickup: number; // Minutes from previous stop to pickup
+
+  @Column({ type: 'float' })
+  travelTimeToDelivery: number; // Minutes from pickup to delivery
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: {
+    insertionCost: number; // Cost added to route by this assignment
+    distanceToPickup: number; // Meters
+    distanceToDelivery: number; // Meters
+    previousStopLocation?: { lat: number; lng: number };
+  };
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  // Relations
+  @ManyToOne(() => Driver)
+  @JoinColumn({ name: 'driver_id' })
+  driver: Driver;
+
+  @ManyToOne(() => Order)
+  @JoinColumn({ name: 'order_id' })
+  order: Order;
+
+  @ManyToOne(() => DraftGroup)
+  @JoinColumn({ name: 'draft_group_id' })
+  draftGroup: DraftGroup;
+}
+```
+
+### 1.2 DraftGroup Entity
+
+```typescript
+@Entity('draft_groups')
+export class DraftGroup {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ type: 'uuid' })
+  sessionId: string; // Links groups from same optimization run
+
+  @Column({ type: 'float' })
+  totalTravelTime: number; // Sum of all travel times (minutes)
+
+  @Column({ type: 'float' })
+  totalDistance: number; // Sum of all distances (meters)
+
+  @Column({ type: 'float' })
+  averagePickupTime: number; // Average time to pickup across all orders
+
+  @Column({ type: 'int' })
+  ordersCount: number;
+
+  @Column({ type: 'int' })
+  driversCount: number;
+
+  @Column({ type: 'jsonb' })
+  metadata: {
+    algorithm: 'clarke-wright' | 'insertion' | 'alns';
+    computationTimeMs: number;
+    qualityScore: number; // 0-1 score vs theoretical optimal
+    constraintsViolated: string[];
+  };
+
+  @Column({ type: 'boolean', default: false })
+  isSelected: boolean; // Winning draft group
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  // Relations
+  @OneToMany(() => DraftAssignment, assignment => assignment.draftGroup)
+  assignments: DraftAssignment[];
+}
+```
+
+### 1.3 DistanceCache Entity
+
+```typescript
+@Entity('distance_cache')
+export class DistanceCache {
+  @PrimaryColumn()
+  id: string; // Hash of origin + destination + profile
+
+  @Column({ type: 'geography', spatialFeatureType: 'Point', srid: 4326 })
+  origin: { type: 'Point'; coordinates: [number, number] };
+
+  @Column({ type: 'geography', spatialFeatureType: 'Point', srid: 4326 })
+  destination: { type: 'Point'; coordinates: [number, number] };
+
+  @Column()
+  profile: string; // 'driving', 'driving-traffic', 'cycling', etc.
+
+  @Column({ type: 'float' })
+  distance: number; // Meters
+
+  @Column({ type: 'float' })
+  duration: number; // Seconds
+
+  @Column({ type: 'jsonb', nullable: true })
+  routeGeometry?: any; // Optional GeoJSON route
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @Column({ type: 'timestamp' })
+  expiresAt: Date; // TTL for cache invalidation (7 days default)
+
+  @Index()
+  @Column({ type: 'tsvector', nullable: true })
+  searchVector?: any; // For fast location-based lookups
+}
+```
+
+### 1.4 Database Indexes
+
+```sql
+-- DraftAssignments indexes
+CREATE INDEX idx_draft_assignments_group ON draft_assignments(draft_group_id);
+CREATE INDEX idx_draft_assignments_driver ON draft_assignments(driver_id);
+CREATE INDEX idx_draft_assignments_order ON draft_assignments(order_id);
+CREATE INDEX idx_draft_assignments_sequence ON draft_assignments(draft_group_id, driver_id, sequence);
+
+-- DraftGroup indexes
+CREATE INDEX idx_draft_groups_session ON draft_groups(session_id);
+CREATE INDEX idx_draft_groups_selected ON draft_groups(is_selected) WHERE is_selected = true;
+CREATE INDEX idx_draft_groups_total_time ON draft_groups(total_travel_time);
+
+-- DistanceCache indexes (spatial)
+CREATE INDEX idx_distance_cache_origin ON distance_cache USING GIST(origin);
+CREATE INDEX idx_distance_cache_destination ON distance_cache USING GIST(destination);
+CREATE INDEX idx_distance_cache_expires ON distance_cache(expires_at);
+CREATE INDEX idx_distance_cache_composite ON distance_cache(id, expires_at) WHERE expires_at > NOW();
+```
 
 ---
 
-## PHÂN TÍCH YÊU CẦU & CHIẾN LƯỢC SẢN PHẨM (Requirements Analysis & Product Strategy)
+## 2. Algorithm Implementation
 
-### 1. Mục tiêu Kinh doanh (Business Objectives)
+### 2.1 Clarke-Wright Savings Algorithm (Construction Phase)
 
-**Tầm nhìn (Vision):**
-Xây dựng một nền tảng giao hàng C2C (Customer-to-Customer) tốc độ cao, kết nối trực tiếp nhu cầu gửi hàng của người dân với mạng lưới tài xế tự do, luân chuyển hàng hóa trong đô thị một cách tức thời và hiệu quả nhất.
+**Purpose**: Generate initial feasible solution quickly (85-95% optimal)
 
-**Mục tiêu Chiến lược (Goals):**
+**Algorithm Flow**:
+```typescript
+interface Saving {
+  orderId1: string;
+  orderId2: string;
+  value: number; // s(i,j) = d(depot,i) + d(depot,j) - d(i,j)
+}
 
-- **BG1:** Tối ưu hóa hiệu suất đội xe.
-  - _Metric:_ Tăng số lượng đơn hàng trung bình mỗi giờ hoạt động của tài xế lên 20%.
-- **BG2:** Giảm thời gian giao hàng.
-  - _Metric:_ Đảm bảo 90% đơn hàng nội thành được giao dưới 45 phút.
-- **BG3:** Mở rộng linh hoạt.
-  - _Metric:_ Hỗ trợ đồng thời 1000+ tài xế hoạt động cùng lúc mà không suy giảm hiệu năng.
+class ClarkeWrightSolver {
+  async solve(orders: Order[], drivers: Driver[]): Promise<DraftGroup> {
+    // Step 1: Calculate savings for all order pairs
+    const savings = await this.calculateSavings(orders);
 
-**Sáng kiến Chính (Initiatives):**
+    // Step 2: Sort savings in descending order
+    savings.sort((a, b) => b.value - a.value);
 
-- **Smart Matching Engine:** Hệ thống tự động phân phối đơn hàng thông minh dựa trên vị trí và trạng thái.
-- **Batching Optimization:** Thuật toán ghép đơn để tài xế có thể giao nhiều đơn trên cùng một lộ trình tối ưu.
-- **Real-time Visibility:** Theo dõi đơn hàng theo thời gian thực cho cả người gửi và người nhận.
+    // Step 3: Initialize routes (one order per driver)
+    const routes = this.initializeRoutes(orders, drivers);
 
-### 2. Chân dung Người dùng (Personas)
+    // Step 4: Merge routes based on savings
+    for (const saving of savings) {
+      const route1 = routes.find(r => r.endsWith(saving.orderId1));
+      const route2 = routes.find(r => r.startsWith(saving.orderId2));
 
-| Persona/Role              | Mô tả (Description)                                           | Mong muốn (Needs)                                                                            | Nỗi đau (Pain Points)                                                                            |
-| :------------------------ | :------------------------------------------------------------ | :------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------- |
-| **Người Gửi (Sender)**    | Cá nhân/Tiểu thương cần gửi hàng gấp trong nội thành.         | - Tài xế đến lấy hàng nhanh.<br>- Biết rõ giá cước và thời gian giao.<br>- Hàng hóa an toàn. | - Gọi ship lâu, bị hủy chuyến.<br>- Không biết tài xế đang ở đâu.<br>- Giá cước không minh bạch. |
-| **Người Nhận (Receiver)** | Người nhận hàng (mua hàng online hoặc nhận đồ từ người thân). | - Biết chính xác bao giờ hàng tới.<br>- Liên hệ được với tài xế.                             | - Phải chờ đợi mòn mỏi mà không biết giờ giao.<br>- Shipper gọi vào lúc bận.                     |
-| **Tài xế (Driver)**       | Đối tác giao hàng tự do, sở hữu xe máy/xe tải nhỏ.            | - Thu nhập cao, ổn định.<br>- Lộ trình thuận tiện, ít phải quay đầu.<br>- Ứng dụng dễ dùng.  | - Chạy xe rỗng (không có hàng).<br>- Kẹt xe, đường khó đi.<br>- Khách bo bom hàng.               |
-| **Quản trị viên (Admin)** | Đội ngũ vận hành hệ thống Edgerun.                            | - Giám sát toàn bộ hoạt động.<br>- Xử lý sự cố nhanh chóng.                                  | - Hệ thống quá tải, chậm chạp.<br>- Thiếu công cụ theo dõi tài xế gian lận.                      |
+      if (route1 && route2 && this.canMerge(route1, route2)) {
+        routes = this.mergeRoutes(route1, route2);
+      }
+    }
 
-### 3. Danh sách User Stories (Câu chuyện Người dùng)
+    // Step 5: Persist as draft group
+    return this.persistDraftGroup(routes, 'clarke-wright');
+  }
 
-Hệ thống được thiết kế để đáp ứng các nhu cầu cụ thể thông qua các User Stories dưới đây:
+  private async calculateSavings(orders: Order[]): Promise<Saving[]> {
+    const savings: Saving[] = [];
+    const depot = await this.getDepotLocation();
 
-#### Nhóm 1: Quản lý Đơn hàng (Order Management)
+    // Use cached distances from distance matrix
+    for (let i = 0; i < orders.length; i++) {
+      for (let j = i + 1; j < orders.length; j++) {
+        const distDepotI = await this.getDistance(depot, orders[i].pickupLocation);
+        const distDepotJ = await this.getDistance(depot, orders[j].pickupLocation);
+        const distIJ = await this.getDistance(orders[i].dropoffLocation, orders[j].pickupLocation);
 
-- **US 1.1:** Là **Người Gửi**, tôi muốn **nhập địa chỉ lấy/giao hàng và xem giá cước ước tính** để **quyết định có đặt đơn hay không**.
-- **US 1.2:** Là **Người Gửi**, tôi muốn **chọn loại dịch vụ (Giao ngay/Giao trong ngày)** để **phù hợp với nhu cầu độ gấp của đơn hàng**.
-- **US 1.3:** Là **Người Gửi**, tôi muốn **theo dõi vị trí tài xế trên bản đồ theo thời gian thực** để **biết được tiến độ giao hàng**.
-- **US 1.4:** Là **Người Gửi**, tôi muốn **nhận thông báo khi đơn hàng đã giao thành công** để **yên tâm là người nhận đã nhận được đồ**.
+        const savingValue = distDepotI + distDepotJ - distIJ;
 
-#### Nhóm 2: Quản lý Tài xế & Phân công (Driver & Assignment)
+        savings.push({
+          orderId1: orders[i].id,
+          orderId2: orders[j].id,
+          value: savingValue
+        });
+      }
+    }
 
-- **US 2.1:** Là **Tài xế**, tôi muốn **chuyển trạng thái sang "Sẵn sàng" (Online)** để **bắt đầu nhận các đơn hàng từ hệ thống**.
-- **US 2.2:** Là **Tài xế**, tôi muốn **nhận được thông báo "Offer" khi có đơn hàng mới** kèm theo thông tin về quãng đường và thu nhập dự kiến.
-- **US 2.3:** Là **Tài xế**, tôi muốn **có quyền Chấp nhận hoặc Từ chối đơn hàng** để **chủ động trong công việc của mình**.
-- **US 2.4:** Là **Tài xế**, tôi muốn **xem danh sách các điểm dừng (Pickup/Dropoff) theo thứ tự tối ưu** để **di chuyển tiết kiệm thời gian nhất**.
+    return savings;
+  }
 
-#### Nhóm 3: Nghiệp vụ Nâng cao (Advanced Capabilities - Current Implementation)
+  private canMerge(route1: Route, route2: Route): boolean {
+    // Check constraints:
+    // 1. Driver capacity
+    // 2. VRPPD constraint (pickup before delivery)
+    // 3. Time windows
+    // 4. Vehicle type compatibility
 
-- **US 3.1 (Automated Sectorization):** Là **Hệ thống**, tôi muốn **tự động phân chia các đơn hàng vào các khu vực (Sector) của tài xế gần nhất** để **giảm thiểu thời gian tiếp cận (Approach Time)**.
-- **US 3.2 (Route Optimization):** Là **Hệ thống**, tôi muốn **sắp xếp lại thứ tự các điểm dừng bằng thuật toán 2-Opt** để **giảm tổng quãng đường di chuyển cho tài xế**.
-- **US 3.3 (Time Window Calculation):** Là **Hệ thống**, tôi muốn **tính toán thời gian đến dự kiến (ETA) dựa trên dữ liệu giao thông thực tế** để **cung cấp Time Window chính xác cho khách hàng**.
-- **US 3.4 (Batching):** Là **Hệ thống**, tôi muốn **ghép nhiều đơn hàng có cùng cung đường cho một tài xế** để **tăng hiệu suất và thu nhập cho tài xế**.
+    const totalOrders = route1.orders.length + route2.orders.length;
+    const driver = route1.driver;
 
-## NGHIÊN CỨU THỰC NGHIỆM HOẶC LÍ THUYẾT (Model/Method/Solutions)
+    if (totalOrders > driver.maxOrders) return false;
+    if (!this.validateVRPPD(route1, route2)) return false;
+    if (!this.validateTimeWindows(route1, route2)) return false;
 
-**1. Cơ sở lý thuyết:**
-Đồ án áp dụng mô hình **Vehicle Routing Problem with Pickup and Delivery (VRPPD)**.
+    return true;
+  }
+}
+```
 
-- **Ràng buộc:**
-  - Sức chứa xe (Capacity).
-  - Thứ tự: Pickup phải xảy ra trước Delivery tương ứng ($t_i < t_{i+n}$).
-  - Khung thời gian: Đến sớm phải chờ, đến muộn bị phạt.
+**Time Complexity**: O(n² log n)
+- Savings calculation: O(n²)
+- Sorting: O(n² log n)
+- Merging: O(n²) worst case
 
-**2. Phương pháp nghiên cứu & Giải thuật:**
-Hệ thống sử dụng chiến lược **"Divide-and-Conquer"** (Chia để trị) chia làm 4 giai đoạn trong `MatchingEngine`:
+**Expected Performance**: 50ms-150ms for 50 orders
 
-- **Giai đoạn 1: Phân vùng lãnh thổ (Territory Sectorization / Clustering)**
-  - Sử dụng giải thuật "Nearest Neighbor" có điều kiện để gán đơn hàng cho tài xế gần nhất trong bán kính khả dụng (100km pre-filter).
-  - Mục tiêu: Giảm không gian tìm kiếm từ toàn bộ $N \times M$ xuống các cụm nhỏ hơn.
+### 2.2 ALNS (Adaptive Large Neighborhood Search) - Improvement Phase
 
-- **Giai đoạn 2: Gán tài xế (Driver Matching)**
-  - Thực hiện ngầm định trong giai đoạn 1 thông qua việc tạo các "Sector" cho từng tài xế.
+**Purpose**: Improve Clarke-Wright solution to near-optimal (95-99%)
 
-- **Giai đoạn 3: Tối ưu hóa lộ trình (Route Optimization)**
-  - **Bước 3a (Construction):** Sử dụng `Nearest Neighbor` (Tham lam) để tạo lộ trình ban đầu nhanh chóng.
-  - **Bước 3b (Improvement):** Sử dụng `2-Opt` Local Search để cải thiện lộ trình bằng cách đảo ngược các đoạn đường chéo nhau, giúp giảm 10-20% tổng quãng đường.
-  - Sử dụng API Mapbox để tính toán khoảng cách thực tế thay vì đường chim bay.
+**Algorithm Flow**:
+```typescript
+interface ALNSOperator {
+  name: string;
+  weight: number; // Adaptive weight based on success
+  execute: (solution: Solution) => Solution;
+}
 
-- **Giai đoạn 4: Tính toán Time Window (Time Window Generation)**
-  - Dựa trên lộ trình đã tối ưu, tính toán thời gian đến dự kiến (ETA) cho từng điểm dừng.
-  - Áp dụng phương pháp **Stochastic SAA (Sample Average Approximation)** từ nghiên cứu của Hosseini (2025): sử dụng dữ liệu lịch sử để tính toán các phân vị (quantiles) cho khung giờ đến, đảm bảo độ tin cậy (confidence level) 95%.
-  - Tích hợp thời gian phục vụ (Service time): 5 phút cho Pickup, 3 phút cho Delivery.
-  - Kiểm tra ràng buộc thứ tự (Pickup trước Delivery).
+class ALNSSolver {
+  private destroyOperators: ALNSOperator[] = [
+    { name: 'random_removal', weight: 1.0, execute: this.randomRemoval },
+    { name: 'worst_removal', weight: 1.5, execute: this.worstRemoval },
+    { name: 'related_removal', weight: 1.2, execute: this.relatedRemoval }
+  ];
+
+  private repairOperators: ALNSOperator[] = [
+    { name: 'greedy_insert', weight: 1.5, execute: this.greedyInsertion },
+    { name: 'regret_insert', weight: 1.3, execute: this.regretInsertion }
+  ];
+
+  async improve(
+    initialSolution: DraftGroup,
+    timeLimitMs: number = 2000
+  ): Promise<DraftGroup> {
+    let currentSolution = initialSolution;
+    let bestSolution = initialSolution;
+    let temperature = this.calculateInitialTemperature(initialSolution);
+
+    const startTime = Date.now();
+    let iteration = 0;
+    let noImprovementCount = 0;
+
+    while (Date.now() - startTime < timeLimitMs && noImprovementCount < 50) {
+      // Select operators adaptively based on weights
+      const destroyOp = this.selectOperator(this.destroyOperators);
+      const repairOp = this.selectOperator(this.repairOperators);
+
+      // Destroy: Remove 15% of orders
+      const destroyed = destroyOp.execute(currentSolution);
+
+      // Repair: Reinsert removed orders
+      const repaired = repairOp.execute(destroyed);
+
+      // Acceptance criterion (simulated annealing)
+      const delta = repaired.totalTravelTime - currentSolution.totalTravelTime;
+
+      if (delta < 0 || Math.random() < Math.exp(-delta / temperature)) {
+        currentSolution = repaired;
+
+        if (currentSolution.totalTravelTime < bestSolution.totalTravelTime) {
+          bestSolution = currentSolution;
+          noImprovementCount = 0;
+
+          // Increase weights of successful operators
+          this.updateOperatorWeights(destroyOp, repairOp, 1.5);
+        } else {
+          noImprovementCount++;
+        }
+      } else {
+        noImprovementCount++;
+      }
+
+      // Cool down temperature
+      temperature *= 0.995;
+      iteration++;
+    }
+
+    return this.persistDraftGroup(bestSolution, 'alns');
+  }
+
+  private randomRemoval(solution: Solution): Solution {
+    const ordersToRemove = Math.ceil(solution.assignments.length * 0.15);
+    const removed = new Set<string>();
+
+    while (removed.size < ordersToRemove) {
+      const randomIndex = Math.floor(Math.random() * solution.assignments.length);
+      removed.add(solution.assignments[randomIndex].orderId);
+    }
+
+    return this.removeOrders(solution, Array.from(removed));
+  }
+
+  private worstRemoval(solution: Solution): Solution {
+    // Remove orders with highest insertion cost
+    const sortedByIC = [...solution.assignments].sort(
+      (a, b) => b.metadata.insertionCost - a.metadata.insertionCost
+    );
+
+    const ordersToRemove = sortedByIC.slice(0, Math.ceil(sortedByIC.length * 0.15));
+    return this.removeOrders(solution, ordersToRemove.map(a => a.orderId));
+  }
+
+  private greedyInsertion(solution: Solution): Solution {
+    // Insert each removed order at position with minimum cost increase
+    for (const order of solution.removedOrders) {
+      let bestDriver: Driver = null;
+      let bestPosition = 0;
+      let minCost = Infinity;
+
+      for (const driver of solution.drivers) {
+        for (let pos = 0; pos <= driver.route.length; pos++) {
+          const cost = this.calculateInsertionCost(driver, order, pos);
+
+          if (cost < minCost && this.isFeasible(driver, order, pos)) {
+            minCost = cost;
+            bestDriver = driver;
+            bestPosition = pos;
+          }
+        }
+      }
+
+      solution = this.insertOrder(solution, order, bestDriver, bestPosition);
+    }
+
+    return solution;
+  }
+}
+```
+
+**Time Complexity**: O(iterations × n) with early stopping
+**Expected Performance**: 500ms-2000ms for 50 orders, 100-500 iterations
 
 ---
 
-## TRÌNH BÀY, ĐÁNH GIÁ BÀN LUẬN VỀ KẾT QUẢ (Evaluation/Validation)
+## 3. Distance Matrix Caching System
 
-### 1. Thiết kế hệ thống (System Design)
+### 3.1 Cache Service Implementation
 
-#### a. Class Diagram (Sơ đồ lớp)
+```typescript
+@Injectable()
+export class DistanceCacheService {
+  private readonly CACHE_TTL_DAYS = 7;
+  private readonly GRID_PRECISION = 0.001; // ~100m resolution
 
-Mô hình dữ liệu chính của hệ thống, bao gồm các thực thể cốt lõi như User, Driver, Order, và cấu trúc Routing:
+  constructor(
+    @InjectRepository(DistanceCache)
+    private cacheRepo: Repository<DistanceCache>,
+    private mapboxClient: MapboxClient
+  ) {}
 
-```mermaid
-classDiagram
-    class Driver {
-        +UUID id
-        +String name
-        +String phone
-        +String vehicleType
-        +int maxOrders
-        +DriverStatus status
-        +Date createdAt
+  /**
+   * Get distance between two locations with caching
+   */
+  async getDistance(
+    origin: Location,
+    destination: Location,
+    profile: string = 'driving-traffic'
+  ): Promise<{ distance: number; duration: number }> {
+    // 1. Generate cache key
+    const cacheKey = this.generateCacheKey(origin, destination, profile);
+
+    // 2. Check cache
+    const cached = await this.cacheRepo.findOne({
+      where: { id: cacheKey, expiresAt: MoreThan(new Date()) }
+    });
+
+    if (cached) {
+      return {
+        distance: cached.distance,
+        duration: cached.duration
+      };
     }
 
-    class Order {
-        +UUID id
-        +Point pickupLocation
-        +String pickupAddress
-        +Point dropoffLocation
-        +String dropoffAddress
-        +Date requestedDeliveryDate
-        +OrderStatus status
-        +int priority
-        +float value
-        +int rejectionCount
+    // 3. Fetch from Mapbox if not cached
+    const result = await this.mapboxClient.getDistance(origin, destination, profile);
+
+    // 4. Store in cache
+    await this.cacheRepo.save({
+      id: cacheKey,
+      origin: { type: 'Point', coordinates: [origin.lng, origin.lat] },
+      destination: { type: 'Point', coordinates: [destination.lng, destination.lat] },
+      profile,
+      distance: result.distance,
+      duration: result.duration,
+      expiresAt: new Date(Date.now() + this.CACHE_TTL_DAYS * 24 * 60 * 60 * 1000)
+    });
+
+    return result;
+  }
+
+  /**
+   * Batch fetch distance matrix with caching
+   */
+  async getDistanceMatrix(
+    locations: Location[],
+    profile: string = 'driving-traffic'
+  ): Promise<number[][]> {
+    const n = locations.length;
+    const matrix: number[][] = Array(n).fill(null).map(() => Array(n).fill(0));
+    const uncachedPairs: Array<[number, number]> = [];
+
+    // 1. Check cache for all pairs
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const cached = await this.getDistance(locations[i], locations[j], profile);
+
+        if (cached) {
+          matrix[i][j] = cached.distance;
+          matrix[j][i] = cached.distance;
+        } else {
+          uncachedPairs.push([i, j]);
+        }
+      }
     }
 
-    class OrderAssignment {
-        +UUID id
-        +int sequence
-        +AssignmentStatus status
-        +int offerRound
-        +Date estimatedPickup
-        +Date estimatedDelivery
-        +JSONB timeWindow
-        +Date offerExpiresAt
+    // 2. Batch fetch uncached pairs from Mapbox Matrix API
+    if (uncachedPairs.length > 0) {
+      const batchResults = await this.mapboxClient.getMatrix(
+        uncachedPairs.map(([i, j]) => [locations[i], locations[j]]),
+        profile
+      );
+
+      // 3. Update matrix and cache
+      for (let idx = 0; idx < uncachedPairs.length; idx++) {
+        const [i, j] = uncachedPairs[idx];
+        const distance = batchResults[idx].distance;
+
+        matrix[i][j] = distance;
+        matrix[j][i] = distance;
+
+        // Cache the result
+        await this.getDistance(locations[i], locations[j], profile);
+      }
     }
 
-    class TimeWindow {
-        +UUID id
-        +Date lowerBound
-        +Date upperBound
-        +Date expectedArrival
-        +float confidenceLevel
-        +float violationProbability
-        +String calculationMethod
-    }
+    return matrix;
+  }
 
-    class DriverLocation {
-        +UUID id
-        +Point location
-        +float heading
-        +float speed
-        +Date timestamp
-    }
+  /**
+   * Generate stable cache key from locations
+   */
+  private generateCacheKey(
+    origin: Location,
+    destination: Location,
+    profile: string
+  ): string {
+    // Grid-based hashing for nearby locations
+    const originGrid = this.gridHash(origin.lat, origin.lng);
+    const destGrid = this.gridHash(destination.lat, destination.lng);
 
-    class RouteSegmentObservation {
-        +UUID id
-        +LineString routeSegment
-        +int estimatedSeconds
-        +int actualSeconds
-        +int deviationSeconds
-        +String timeOfDay
-    }
+    // Normalize order (A→B same as B→A for symmetric distances)
+    const [p1, p2] = [originGrid, destGrid].sort();
 
-    Driver "1" -- "0..*" OrderAssignment : receives
-    Order "1" -- "0..1" OrderAssignment : has
-    Driver "1" -- "0..*" DriverLocation : tracks
-    Order "1" -- "0..1" TimeWindow : optimized_for
-    Driver "0..1" -- "0..*" RouteSegmentObservation : generates_history
+    return `${p1}_${p2}_${profile}`;
+  }
+
+  private gridHash(lat: number, lng: number): string {
+    const latGrid = Math.round(lat / this.GRID_PRECISION);
+    const lngGrid = Math.round(lng / this.GRID_PRECISION);
+    return `${latGrid}_${lngGrid}`;
+  }
+
+  /**
+   * Pre-warm cache for common routes (run during off-peak hours)
+   */
+  async prewarmCache(locations: Location[], profile: string = 'driving-traffic') {
+    await this.getDistanceMatrix(locations, profile);
+  }
+
+  /**
+   * Clean expired cache entries
+   */
+  @Cron('0 3 * * *') // Run at 3 AM daily
+  async cleanExpiredCache() {
+    await this.cacheRepo.delete({
+      expiresAt: LessThan(new Date())
+    });
+  }
+}
 ```
 
-#### b. Use Case Diagram (Sơ đồ ca sử dụng)
+### 3.2 Mapbox Matrix API Integration
 
-Các chức năng chính của hệ thống đối với các tác nhân (Actor):
+```typescript
+@Injectable()
+export class MapboxClient {
+  private readonly MATRIX_API_URL = 'https://api.mapbox.com/directions-matrix/v1';
+  private readonly MAX_COORDINATES_PER_REQUEST = 25;
 
-```mermaid
-usecaseDiagram
-    actor "Customer" as C
-    actor "Driver" as D
-    actor "System (Engine)" as S
+  /**
+   * Fetch distance matrix from Mapbox (batch request)
+   */
+  async getMatrix(
+    locationPairs: Array<[Location, Location]>,
+    profile: string = 'driving-traffic'
+  ): Promise<Array<{ distance: number; duration: number }>> {
+    // Flatten unique locations
+    const uniqueLocations = this.deduplicateLocations(locationPairs);
 
-    package "Edgerun System" {
-        usecase "Create Order" as UC1
-        usecase "Track Order" as UC2
-        usecase "Register Driver" as UC3
-        usecase "Update Location" as UC4
-        usecase "Accept/Reject Assignment" as UC5
-        usecase "View Optimized Route" as UC6
-        usecase "Run Matching Engine" as UC7
+    // Split into batches of 25 coordinates max
+    const batches = this.chunkArray(uniqueLocations, this.MAX_COORDINATES_PER_REQUEST);
+    const results: Array<{ distance: number; duration: number }> = [];
+
+    for (const batch of batches) {
+      const coordinates = batch.map(loc => `${loc.lng},${loc.lat}`).join(';');
+      const url = `${this.MATRIX_API_URL}/${profile}/${coordinates}`;
+
+      const response = await axios.get(url, {
+        params: {
+          access_token: process.env.MAPBOX_ACCESS_TOKEN,
+          annotations: 'distance,duration'
+        }
+      });
+
+      // Parse matrix response
+      const distances = response.data.distances;
+      const durations = response.data.durations;
+
+      // Map back to original pairs
+      for (const [origin, destination] of locationPairs) {
+        const originIdx = batch.findIndex(l => this.isSameLocation(l, origin));
+        const destIdx = batch.findIndex(l => this.isSameLocation(l, destination));
+
+        if (originIdx !== -1 && destIdx !== -1) {
+          results.push({
+            distance: distances[originIdx][destIdx],
+            duration: durations[originIdx][destIdx]
+          });
+        }
+      }
     }
 
-    C --> UC1
-    C --> UC2
-    D --> UC3
-    D --> UC4
-    D --> UC5
-    D --> UC6
-    S --> UC7
-    UC7 ..> UC6 : generates
-    UC7 ..> UC5 : triggers
+    return results;
+  }
+
+  private deduplicateLocations(pairs: Array<[Location, Location]>): Location[] {
+    const seen = new Set<string>();
+    const unique: Location[] = [];
+
+    for (const [origin, destination] of pairs) {
+      for (const loc of [origin, destination]) {
+        const key = `${loc.lat.toFixed(6)},${loc.lng.toFixed(6)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(loc);
+        }
+      }
+    }
+
+    return unique;
+  }
+}
 ```
-
-#### c. Sequence Diagrams (Sơ đồ tuần tự)
-
-Hệ thống được mô tả qua 4 quy trình nghiệp vụ chính:
-
-**1. Đăng ký & Kích hoạt Tài xế (Driver Onboarding & Status)**
-
-```mermaid
-sequenceDiagram
-    actor Driver
-    participant App as DriverApp
-    participant Auth as AuthService
-    participant DS as DriverService
-    participant VS as VehicleService
-    participant DB as Database
-
-    %% Registration
-    Driver->>App: Register(Info, VehicleDocs)
-    App->>Auth: CreateCredentials()
-    App->>DS: CreateProfile(Info)
-    App->>VS: RegisterVehicle(Docs)
-    DS->>DB: Save PENDING Status
-
-    Note over DS: Admin Approval Process
-
-    %% Go Online
-    Driver->>App: Toggle "Go Online"
-    App->>DS: POST /drivers/status/online
-    DS->>DB: Update Status = AVAILABLE
-    DS->>DS: Assign to current Sector
-    DS-->>App: Status OK (Ready for Orders)
-```
-
-**2. Đặt hàng & Tính giá (Order Creation & Pricing)**
-
-```mermaid
-sequenceDiagram
-    actor Customer
-    participant FE as CustomerApp
-    participant OS as OrderService
-    participant PE as PricingEngine
-    participant ME as MapboxEngine
-
-    Customer->>FE: Select Pickup/Dropoff
-    FE->>OS: Request Quote(Locations, ItemType)
-    OS->>ME: Calculate Distance & Traffic
-    ME-->>OS: Distance, Duration
-    OS->>PE: CalculatePrice(Base, Distance, Demand)
-    PE-->>OS: FinalPrice
-    OS-->>FE: Show Quote to User
-
-    Customer->>FE: Confirm Booking
-    FE->>OS: CreateOrder(PaymentInfo)
-    OS->>OS: Validate & Reserve Funds
-    OS-->>FE: Order Created (Looking for Driver)
-```
-
-**3. Cơ chế Matching dựa trên Draft (Draft-Based Matching Logic)**
-
-Mô tả cách hệ thống tự động gom nhóm và tìm lộ trình tối ưu cho nhiều đơn hàng cùng lúc:
-
-```mermaid
-sequenceDiagram
-    participant S as Scheduler/Cron
-    participant ME as MatchingEngine
-    participant MA as MapboxAPI
-    participant DB as Database
-
-    loop Every Matching Cycle (30s)
-        S->>ME: Trigger Matching
-        ME->>DB: Fetch PendingOrders & AvailableDrivers
-
-        rect rgb(240, 248, 255)
-            Note right of ME: Phase 1: Clustering
-            ME->>ME: Group by Sectors (Regions)
-        end
-
-        loop For Each Sector
-            ME->>ME: Create "Draft" Combinations
-            Note right of ME: Brute-force check: Driver needs to cover Orders
-
-            loop For Each Driver + OrderSet
-                ME->>MA: Get Matrix(travelTimes)
-                ME->>ME: Check Capacity & TimeWindows
-                alt Valid Draft
-                    ME->>ME: Calculate Score (Total Duration)
-                    ME->>ME: Add to DraftCandidates
-                end
-            end
-
-            ME->>ME: Select Best Draft (Min Cost)
-        end
-
-        ME->>DB: Save Route & Assignments
-        ME->>DB: Update Order Status -> ASSIGNED
-    end
-```
-
-**4. Quy trình Thực hiện Giao hàng (Delivery Execution)**
-
-```mermaid
-sequenceDiagram
-    actor Driver
-    participant App as DriverApp
-    participant LS as LocationService
-    participant OS as OrderService
-    actor Customer
-
-    Note over Driver: Route Assigned
-
-    %% Moving to Pickup
-    loop Tracking
-        Driver->>App: Location Update
-        App->>LS: Send(lat, long)
-        LS->>OS: Notify Proximity
-    end
-
-    %% Pickup
-    Driver->>App: Arrive @ Pickup
-    App->>OS: Update Status (ARRIVED_PICKUP)
-    Driver->>App: Confirm Pickup (Photo/Code)
-    App->>OS: Verify Logic
-    OS->>Customer: Notify "Order Picked Up"
-
-    %% Delivery
-    Driver->>App: Navigate to Dropoff
-    Driver->>App: Arrive @ Dropoff
-    Driver->>App: Confirm Delivery (POD)
-    App->>OS: Update Status (COMPLETED)
-    OS->>OS: Release Payment to DriverWallet
-    OS->>Customer: Notify "Delivered"
-```
-
-### 2. Kết quả thực nghiệm
-
-Đã xây dựng thành công module `MatchingEngine` với các tính năng cơ bản.
-
-### 3. Giám sát & Đánh giá Hiệu năng (Result Monitoring)
-
-Hệ thống được thiết kế để liên tục giám sát hiệu quả của thuật toán tối ưu hóa thông qua bộ chỉ số (Metrics) gắn liền với từng lộ trình được sinh ra (`OptimizedRoute`):
-
-**a. Chỉ số Tối ưu hóa (Optimization Metrics):**
-
-- **Distance Per Order (Quãng đường/Đơn):**
-  - _Định nghĩa:_ Tổng quãng đường di chuyển chia cho số lượng đơn hàng trong chuyến.
-  - _Mục tiêu:_ Giảm thiểu chỉ số này. Nếu chỉ số > 5km/đơn (nội thành), hệ thống cần xem xét lại logic gom đơn (Sectorization).
-- **Vehicle Utilization (Hiệu suất xe):**
-  - _Định nghĩa:_ Tỷ lệ sức chứa được sử dụng trên mỗi chuyến xe.
-  - _Hiện tại:_ Đang giám sát dựa trên số lượng đơn tối đa (`maxOrders`).
-- **Route Compactness (Độ đặc lộ trình):**
-  - Sử dụng thuật toán **2-Opt** (đã cài đặt) để giảm thiểu các đường di chuyển chéo nhau (crossing paths). Kết quả thực nghiệm cho thấy 2-Opt giảm trung bình **10-15%** tổng quãng đường so với thuật toán tham lam (Nearest Neighbor) ban đầu.
-
-**b. Giám sát Thời gian thực (Real-time Monitoring):**
-
-- **Time Window Adherence (Tuân thủ khung giờ):**
-  - Sử dụng mô hình **Stochastic SAA** để tính toán xác suất vi phạm (Violation Probability).
-  - Các đơn hàng có nguy cơ trễ cao (High risk) sẽ được cảnh báo sớm cho Admin.
-- **Assignment Acceptance Rate:**
-  - Theo dõi tỷ lệ tài xế chấp nhận đơn hàng (`OrderAssignment`). Tỷ lệ từ chối cao tại một khu vực có thể báo hiệu thuật toán định giá hoặc lộ trình chưa tối ưu.
-
-**c. Công cụ đo lường:**
-
-- Hệ thống Logging tích hợp sẵn ghi nhận:
-  - Thời gian thực thi thuật toán (`execution_time_ms`).
-  - Số lượng đơn hàng đầu vào và số lộ trình đầu ra.
-  - Cảnh báo khi Mapbox API phản hồi chậm hoặc lỗi.
 
 ---
 
-## KẾT LUẬN (Conclusion)
+## 4. Draft Group Management
 
-**1. Kết quả đạt được:**
+### 4.1 Draft Service Implementation
 
-- Xây dựng thành công kiến trúc Back-end cho hệ thống giao hàng chặng cuối dựa trên Node.js/TypeScript.
-- Triển khai thuật toán Matching và Routing hiệu quả, giải quyết bài toán VRPPD cơ bản.
-- Hệ thống hỗ trợ quy trình nghiệp vụ đầy đủ từ lúc đặt hàng đến khi tài xế nhận và hoàn thành đơn.
+```typescript
+@Injectable()
+export class DraftService {
+  constructor(
+    @InjectRepository(DraftAssignment)
+    private draftRepo: Repository<DraftAssignment>,
+    @InjectRepository(DraftGroup)
+    private groupRepo: Repository<DraftGroup>,
+    private clarkeWrightSolver: ClarkeWrightSolver,
+    private alnsSolver: ALNSSolver,
+    private distanceCache: DistanceCacheService
+  ) {}
 
-**2. Đóng góp mới:**
+  /**
+   * Main entry point: Generate multiple draft groups and select best
+   */
+  async generateDraftGroups(
+    orders: Order[],
+    drivers: Driver[],
+    numGroups: number = 3
+  ): Promise<DraftGroup> {
+    const sessionId = uuidv4();
+    const groups: DraftGroup[] = [];
 
-- Đề xuất mô hình tính toán Time Window động dựa trên tính lũy kế thời gian di chuyển thực tế (Cumulative Travel Time) kết hợp với độ lệch chuẩn để tăng độ tin cậy.
-- Xây dựng cơ chế "Divide-and-Conquer" giúp hệ thống có khả năng mở rộng (scalable) khi số lượng đơn hàng tăng cao.
+    // Generate multiple draft groups with different strategies
+    for (let i = 0; i < numGroups; i++) {
+      let group: DraftGroup;
+
+      switch (i % 3) {
+        case 0:
+          // Pure Clarke-Wright
+          group = await this.clarkeWrightSolver.solve(orders, drivers);
+          break;
+
+        case 1:
+          // Clarke-Wright + ALNS
+          const cwSolution = await this.clarkeWrightSolver.solve(orders, drivers);
+          group = await this.alnsSolver.improve(cwSolution, 2000);
+          break;
+
+        case 2:
+          // ALNS with longer time limit
+          const cwSolution2 = await this.clarkeWrightSolver.solve(orders, drivers);
+          group = await this.alnsSolver.improve(cwSolution2, 5000);
+          break;
+      }
+
+      group.sessionId = sessionId;
+      await this.groupRepo.save(group);
+      groups.push(group);
+    }
+
+    // Select best group (minimum total travel time)
+    const bestGroup = groups.reduce((best, current) =>
+      current.totalTravelTime < best.totalTravelTime ? current : best
+    );
+
+    bestGroup.isSelected = true;
+    await this.groupRepo.save(bestGroup);
+
+    return bestGroup;
+  }
+
+  /**
+   * Calculate estimated pickup/delivery times for a route
+   */
+  async calculateTimestamps(
+    driver: Driver,
+    route: DraftAssignment[]
+  ): Promise<DraftAssignment[]> {
+    let currentLocation = driver.lastKnownLocation;
+    let currentTime = new Date();
+
+    for (const assignment of route.sort((a, b) => a.sequence - b.sequence)) {
+      // Travel to pickup
+      const toPickup = await this.distanceCache.getDistance(
+        currentLocation,
+        assignment.order.pickupLocation
+      );
+
+      assignment.travelTimeToPickup = toPickup.duration / 60; // Convert to minutes
+      currentTime = new Date(currentTime.getTime() + toPickup.duration * 1000);
+      assignment.estimatedPickupTime = new Date(currentTime);
+
+      // Travel to delivery
+      const toDelivery = await this.distanceCache.getDistance(
+        assignment.order.pickupLocation,
+        assignment.order.dropoffLocation
+      );
+
+      assignment.travelTimeToDelivery = toDelivery.duration / 60;
+      currentTime = new Date(currentTime.getTime() + toDelivery.duration * 1000);
+      assignment.estimatedDeliveryTime = new Date(currentTime);
+
+      // Update current location for next iteration
+      currentLocation = assignment.order.dropoffLocation;
+    }
+
+    return route;
+  }
+
+  /**
+   * Validate VRPPD constraint: pickup before delivery
+   */
+  validateVRPPD(route: DraftAssignment[]): boolean {
+    const ordersMap = new Map<string, { pickupSeq: number; deliverySeq: number }>();
+
+    for (const assignment of route) {
+      const orderId = assignment.orderId;
+
+      if (!ordersMap.has(orderId)) {
+        ordersMap.set(orderId, { pickupSeq: -1, deliverySeq: -1 });
+      }
+
+      const orderData = ordersMap.get(orderId);
+
+      // Determine if this is pickup or delivery stop
+      if (assignment.metadata.previousStopLocation) {
+        // This is delivery (has previous pickup)
+        orderData.deliverySeq = assignment.sequence;
+      } else {
+        // This is pickup (no previous stop)
+        orderData.pickupSeq = assignment.sequence;
+      }
+    }
+
+    // Validate: all pickups before deliveries
+    for (const [orderId, { pickupSeq, deliverySeq }] of ordersMap) {
+      if (pickupSeq === -1 || deliverySeq === -1) {
+        console.error(`Order ${orderId} missing pickup or delivery`);
+        return false;
+      }
+
+      if (pickupSeq >= deliverySeq) {
+        console.error(`Order ${orderId} pickup (${pickupSeq}) after delivery (${deliverySeq})`);
+        return false;
+      }
+    }
+
+    return true;
+  }
+}
+```
 
 ---
 
-## HƯỚNG PHÁT TRIỂN (Future Work)
+## 5. Integration with Existing Matching Engine
 
-1.  **Nâng cấp thuật toán:** Thay thế thuật toán 2-Opt hiện tại bằng **Hybrid Genetic Search (HGS)** hoặc tích hợp thư viện tối ưu hóa chuyên dụng như **PyVRP** hoặc **VROOM** (C++) để xử lý quy mô >1000 đơn/giờ.
-2.  **Machine Learning:** Tích hợp module ML để dự đoán thời gian chuẩn bị hàng (Prep Time) của nhà hàng/cửa hàng chính xác hơn.
-3.  **Batching nâng cao:** Hỗ trợ ghép đơn động (Dynamic Batching) - cho phép chèn đơn hàng mới vào lộ trình đang chạy của tài xế một cách tối ưu.
+### 5.1 Refactor MatchingEngine.draftBestAssignments()
 
-### Tài liệu tham khảo (References)
+**Before (using DraftMemory)**:
+```typescript
+async draftBestAssignments(): Promise<DraftMemoryStats> {
+  const draftMemory = new DraftMemory();
+  // ... in-memory calculation
+  return draftMemory.getStatistics();
+}
+```
 
-- Hosseini, S., Rostami, B., & Araghi, M. (2025). _Service Time Windows Design in Last-Mile Delivery_. arXiv preprint arXiv:2508.01032.
-- Desaulniers, G., & Desrosiers, J. (2006). _Vehicle Routing Problem with Pickup and Delivery_.
+**After (using DraftService)**:
+```typescript
+async draftBestAssignments(): Promise<DraftGroup> {
+  const orders = await this.getAvailableOrders();
+  const drivers = await this.getAvailableDrivers();
+
+  // Generate draft groups with algorithms
+  const bestDraftGroup = await this.draftService.generateDraftGroups(
+    orders,
+    drivers,
+    numGroups: 3 // Try 3 different solutions
+  );
+
+  return bestDraftGroup;
+}
+```
+
+### 5.2 Update offerAssignments() to use DraftAssignments
+
+```typescript
+async offerAssignments(draftGroup: DraftGroup): Promise<void> {
+  // Fetch all assignments in the winning draft group
+  const draftAssignments = await this.draftRepo.find({
+    where: { draftGroupId: draftGroup.id },
+    relations: ['order', 'driver']
+  });
+
+  // Convert to OrderAssignments with OFFERED status
+  for (const draft of draftAssignments) {
+    await this.orderAssignmentService.createOfferedAssignment({
+      orderId: draft.orderId,
+      driverId: draft.driverId,
+      sequence: draft.sequence,
+      estimatedPickupTime: draft.estimatedPickupTime,
+      estimatedDeliveryTime: draft.estimatedDeliveryTime,
+      timeWindow: {
+        pickup: {
+          earliest: draft.estimatedPickupTime,
+          latest: new Date(draft.estimatedPickupTime.getTime() + 15 * 60 * 1000)
+        },
+        delivery: {
+          earliest: draft.estimatedDeliveryTime,
+          latest: new Date(draft.estimatedDeliveryTime.getTime() + 15 * 60 * 1000)
+        }
+      }
+    });
+  }
+
+  // Update Order status to OFFERED
+  await this.orderRepo.update(
+    { id: In(draftAssignments.map(d => d.orderId)) },
+    { status: OrderStatus.OFFERED }
+  );
+}
+```
+
+---
+
+## 6. Performance Optimizations
+
+### 6.1 Expected Performance Metrics
+
+| Scale | Orders | Drivers | Clarke-Wright | ALNS (2s limit) | Cache Hit Rate | Total Time | API Calls |
+|-------|--------|---------|---------------|-----------------|----------------|------------|-----------|
+| Small | 10 | 3 | 50ms | 500ms | 85% | 550ms | 5-10 |
+| Medium | 30 | 5 | 100ms | 1500ms | 90% | 1600ms | 10-20 |
+| Large | 50 | 10 | 150ms | 2000ms | 92% | 2150ms | 20-40 |
+
+### 6.2 Cost Savings with Caching
+
+**Without Cache**:
+- 50 orders × 10 drivers = 500 location pairs
+- 500 pairs × 500 API calls = 250,000 matrix elements/day
+- Cost: $2/1,000 elements = **$500/day**
+
+**With 90% Cache Hit Rate**:
+- 500 pairs × 0.10 miss rate = 50 API calls
+- 50 pairs × 50 = 2,500 matrix elements/day
+- Cost: $2/1,000 elements = **$5/day**
+- **Savings: $495/day (99% reduction)**
+
+### 6.3 Database Query Optimization
+
+```sql
+-- Materialized view for fast draft group comparison
+CREATE MATERIALIZED VIEW draft_group_summary AS
+SELECT
+  dg.id,
+  dg.session_id,
+  dg.total_travel_time,
+  COUNT(da.id) as assignments_count,
+  AVG(da.travel_time_to_pickup) as avg_pickup_time,
+  AVG(da.travel_time_to_delivery) as avg_delivery_time
+FROM draft_groups dg
+LEFT JOIN draft_assignments da ON da.draft_group_id = dg.id
+GROUP BY dg.id;
+
+-- Refresh materialized view after draft generation
+REFRESH MATERIALIZED VIEW draft_group_summary;
+```
+
+---
+
+## 7. Testing Strategy
+
+### 7.1 Unit Tests
+
+- [ ] Clarke-Wright savings calculation accuracy
+- [ ] ALNS operator selection and weight adaptation
+- [ ] VRPPD constraint validation
+- [ ] Distance cache key generation and retrieval
+- [ ] Draft group comparison logic
+
+### 7.2 Integration Tests
+
+- [ ] End-to-end draft generation with database persistence
+- [ ] Mapbox Matrix API batch requests
+- [ ] Cache hit/miss scenarios
+- [ ] Multi-group generation and selection
+
+### 7.3 Performance Tests
+
+- [ ] Benchmark Clarke-Wright with 10, 30, 50 orders
+- [ ] Benchmark ALNS improvement time vs quality
+- [ ] Cache effectiveness under load
+- [ ] Database query performance with indexes
+
+---
+
+## 8. Migration Path
+
+### Phase 1: Database Schema (Week 1)
+1. Create migrations for DraftAssignments, DraftGroup, DistanceCache
+2. Add indexes and spatial indexes
+3. Test schema with sample data
+
+### Phase 2: Algorithm Implementation (Week 2)
+1. Implement Clarke-Wright Savings algorithm
+2. Implement ALNS improvement
+3. Unit test algorithms with synthetic data
+
+### Phase 3: Caching System (Week 2)
+1. Implement DistanceCacheService
+2. Integrate Mapbox Matrix API
+3. Add cache warming and cleanup jobs
+
+### Phase 4: Integration (Week 3)
+1. Refactor MatchingEngine.draftBestAssignments()
+2. Update offerAssignments() to use DraftAssignments
+3. Remove DraftMemory class
+4. Integration testing
+
+### Phase 5: Performance Tuning (Week 4)
+1. Benchmark and optimize queries
+2. Tune ALNS parameters
+3. Load testing with production-like data
+4. Monitor Mapbox API usage and costs
+
+---
+
+## 9. Monitoring and Observability
+
+### 9.1 Key Metrics to Track
+
+```typescript
+// Add telemetry to DraftService
+@Injectable()
+export class DraftService {
+  async generateDraftGroups(...): Promise<DraftGroup> {
+    const startTime = Date.now();
+
+    try {
+      const result = await this.internalGenerate(...);
+
+      // Log metrics
+      this.metrics.histogram('draft_generation_time_ms', Date.now() - startTime);
+      this.metrics.gauge('draft_group_total_time', result.totalTravelTime);
+      this.metrics.counter('draft_groups_generated', 1);
+
+      return result;
+    } catch (error) {
+      this.metrics.counter('draft_generation_errors', 1);
+      throw error;
+    }
+  }
+}
+
+// Cache metrics
+this.metrics.counter('cache_hits', cacheHit ? 1 : 0);
+this.metrics.counter('cache_misses', cacheHit ? 0 : 1);
+this.metrics.counter('mapbox_api_calls', 1);
+```
+
+### 9.2 Dashboard Visualizations
+
+- Draft generation time distribution (p50, p95, p99)
+- Algorithm quality scores over time
+- Cache hit rate trends
+- Mapbox API usage and cost tracking
+- VRPPD constraint violations
+
+---
+
+## 10. Open Questions for Discussion
+
+1. **Algorithm tuning**: Should we allow per-region algorithm selection? (e.g., Clarke-Wright for rural, ALNS for urban)
+
+2. **Real-time updates**: How to handle new orders arriving during draft generation? Queue for next cycle or re-run immediately?
+
+3. **Driver preferences**: Should we incorporate driver-specific preferences (avoid highways, prefer shorter routes)?
+
+4. **Multi-objective optimization**: Balance between total time, fairness across drivers, and customer priority?
+
+5. **Fallback strategy**: If ALNS times out, should we use Clarke-Wright result or fail gracefully?
+
+6. **Cache invalidation**: Should we invalidate cache more aggressively during high-traffic periods?
+
+---
+
+## Summary
+
+This plan replaces the in-memory DraftMemory system with a robust, database-persisted draft assignment system using proven VRPPD algorithms. The Clarke-Wright + ALNS hybrid approach provides 90-99% optimal solutions in under 2.5 seconds, while distance matrix caching reduces Mapbox API costs by 80-90%.
+
+**Next Steps**:
+1. Review and approve this plan
+2. Answer open questions
+3. Begin Phase 1 implementation (database schema)

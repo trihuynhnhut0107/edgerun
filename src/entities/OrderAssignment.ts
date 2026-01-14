@@ -5,7 +5,6 @@ import {
   ManyToOne,
   OneToOne,
   JoinColumn,
-  Index,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -14,16 +13,14 @@ import { Driver } from './Driver';
 import { AssignmentStatus } from '../enums/AssignmentStatus';
 
 @Entity('order_assignments')
-@Index(['driverId'])
-@Index(['orderId'])
 export class OrderAssignment {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: 'uuid', unique: true })
+  @Column({ type: 'uuid', name: 'order_id' })
   orderId!: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', name: 'driver_id' })
   driverId!: string;
 
   // Route sequence position
@@ -88,11 +85,11 @@ export class OrderAssignment {
   updatedAt!: Date;
 
   @OneToOne(() => Order, (order) => order.assignment, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'orderId' })
+  @JoinColumn({ name: 'order_id' })
   order?: Order;
 
   @ManyToOne(() => Driver, (driver) => driver.assignments, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'driverId' })
+  @JoinColumn({ name: 'driver_id' })
   driver?: Driver;
 
   // Optimized service time window (generated after Stage 4 algorithm)

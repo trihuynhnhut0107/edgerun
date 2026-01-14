@@ -20,6 +20,7 @@ export class OrderController extends Controller {
       preferredTimeSlot: body.preferredTimeSlot,
       priority: body.priority,
       value: body.value,
+      customerId: body.customerId,
     });
 
     // TODO: Implement matching algorithm (Phase 6 - see 05_IMPLEMENTATION_PLAN.md)
@@ -52,6 +53,9 @@ export class OrderController extends Controller {
       priority: order.priority,
       value: order.value,
       driverId: order.assignment?.driverId,
+      customerId: order.customerId,
+      estimatedDistance: order.estimatedDistance,
+      estimatedDuration: order.estimatedDuration,
     };
   }
 
@@ -83,6 +87,9 @@ export class OrderController extends Controller {
       priority: order.priority,
       value: order.value,
       driverId: order.assignment?.driverId,
+      customerId: order.customerId,
+      estimatedDistance: order.estimatedDistance,
+      estimatedDuration: order.estimatedDuration,
     };
   }
 }

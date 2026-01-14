@@ -52,4 +52,7 @@ export interface CreateOrderRequest {
 
   /** Order value in dollars (for revenue tracking) */
   value?: number;
+
+  /** Customer ID (optional - for registered customers) */
+  customerId?: string;
 }

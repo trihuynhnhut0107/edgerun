@@ -3,22 +3,28 @@ import {
   PrimaryGeneratedColumn,
   Column,
   OneToOne,
+  ManyToOne,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
-  Index,
 } from 'typeorm';
 import { Point } from 'geojson';
 import { OrderAssignment } from './OrderAssignment';
+import { Customer } from './Customer';
 import { OrderStatus } from '../enums/OrderStatus';
 
 @Entity('orders')
-@Index(['status'])
-@Index(['requestedDeliveryDate'])
-@Index(['pickupLocation'], { spatial: true })
-@Index(['dropoffLocation'], { spatial: true })
 export class Order {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  // CUSTOMER RELATIONSHIP
+  @Column({ type: 'uuid', nullable: true })
+  customerId?: string;
+
+  @ManyToOne(() => Customer, (customer) => customer.orders, { nullable: true })
+  @JoinColumn({ name: 'customerId' })
+  customer?: Customer;
 
   // PICKUP LOCATION (required - from customer) - PostGIS Point geometry
   @Column({
@@ -72,6 +78,21 @@ export class Order {
 
   @Column({ type: 'float', default: 0, comment: 'Order value in dollars' })
   value!: number;
+
+  // DISTANCE CACHE - Calculated on order creation
+  @Column({
+    type: 'float',
+    nullable: true,
+    comment: 'Estimated distance from pickup to dropoff in meters',
+  })
+  estimatedDistance?: number;
+
+  @Column({
+    type: 'float',
+    nullable: true,
+    comment: 'Estimated duration from pickup to dropoff in seconds',
+  })
+  estimatedDuration?: number;
 
   // ASSIGNMENT TRACKING
   @Column({

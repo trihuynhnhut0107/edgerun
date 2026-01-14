@@ -3,7 +3,6 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  Index,
   CreateDateColumn,
   JoinColumn,
 } from 'typeorm';
@@ -11,14 +10,11 @@ import { Point } from 'geojson';
 import { Driver } from './Driver';
 
 @Entity('driver_locations')
-@Index(['driverId', 'timestamp'])
-@Index(['driverId'])
-@Index(['location'], { spatial: true })
 export class DriverLocation {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', name: 'driver_id' })
   driverId!: string;
 
   // Geographic location as PostGIS Point (lng, lat in GeoJSON order)
@@ -41,6 +37,6 @@ export class DriverLocation {
   timestamp!: Date;
 
   @ManyToOne(() => Driver, (driver) => driver.locations, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'driverId' })
+  @JoinColumn({ name: 'driver_id' })
   driver?: Driver;
 }

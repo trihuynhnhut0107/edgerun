@@ -8,6 +8,7 @@
     "build": "tsoa spec && tsc",
     "start": "node dist/index.js",
     "seed": "ts-node src/utils/seedDatabase.ts",
+    "database:clear": "ts-node src/utils/clearDatabase.ts",
     "seed:test": "ts-node src/utils/testDatabaseSetup.ts",
     "test": "jest",
     "test:watch": "jest --watch",

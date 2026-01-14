@@ -1,11 +1,12 @@
-import { AppDataSource } from '../../config/ormconfig';
-import { OrderAssignment } from '../../entities/OrderAssignment';
-import { Order } from '../../entities/Order';
-import { Driver } from '../../entities/Driver';
-import { OrderStatus } from '../../enums/OrderStatus';
-import { DriverStatus } from '../../enums/DriverStatus';
-import { AssignmentStatus } from '../../enums/AssignmentStatus';
-import { LessThan } from 'typeorm';
+import { AppDataSource } from "../../config/ormconfig";
+import { OrderAssignment } from "../../entities/OrderAssignment";
+import { Order } from "../../entities/Order";
+import { Driver } from "../../entities/Driver";
+import { OrderStatus } from "../../enums/OrderStatus";
+import { DriverStatus } from "../../enums/DriverStatus";
+import { AssignmentStatus } from "../../enums/AssignmentStatus";
+import { LessThan } from "typeorm";
+import { matchOrders } from "../matching/matchingEngine";
 
 export interface TimeWindowData {
   lowerBound: Date;
@@ -58,16 +59,18 @@ export class OrderAssignmentService {
     // Verify order exists and is pending
     const order = await this.orderRepo.findOne({ where: { id: data.orderId } });
     if (!order) {
-      throw new Error('Order not found');
+      throw new Error("Order not found");
     }
     if (order.status !== OrderStatus.PENDING) {
       throw new Error(`Order status must be PENDING, got: ${order.status}`);
     }
 
     // Verify driver exists and is available
-    const driver = await this.driverRepo.findOne({ where: { id: data.driverId } });
+    const driver = await this.driverRepo.findOne({
+      where: { id: data.driverId },
+    });
     if (!driver) {
-      throw new Error('Driver not found');
+      throw new Error("Driver not found");
     }
 
     // Check if order is already assigned
@@ -75,7 +78,7 @@ export class OrderAssignmentService {
       where: { orderId: data.orderId },
     });
     if (existingAssignment) {
-      throw new Error('Order is already assigned');
+      throw new Error("Order is already assigned");
     }
 
     // Create assignment
@@ -91,9 +94,11 @@ export class OrderAssignmentService {
 
     const savedAssignment = await this.assignmentRepo.save(assignment);
 
-    // Update order status
-    order.status = OrderStatus.ASSIGNED;
-    await this.orderRepo.save(order);
+    // Update order status - use .update() to avoid cascading to eager-loaded assignment
+    await this.orderRepo.update(
+      { id: data.orderId },
+      { status: OrderStatus.ASSIGNED }
+    );
 
     // Update driver status if this is their first order
     if (driver.status === DriverStatus.AVAILABLE) {
@@ -115,7 +120,7 @@ export class OrderAssignmentService {
     // Verify order exists and is PENDING
     const order = await this.orderRepo.findOne({ where: { id: data.orderId } });
     if (!order) {
-      throw new Error('Order not found');
+      throw new Error("Order not found");
     }
     if (order.status !== OrderStatus.PENDING) {
       throw new Error(`Order must be PENDING, got: ${order.status}`);
@@ -129,7 +134,7 @@ export class OrderAssignmentService {
       },
     });
     if (existingOffer) {
-      throw new Error('Order already has pending offer');
+      throw new Error("Order already has pending offer");
     }
 
     // Create OFFERED assignment with 3-minute expiry
@@ -141,15 +146,20 @@ export class OrderAssignmentService {
       estimatedDelivery: data.estimatedDelivery,
       timeWindow: data.timeWindow || undefined,
       status: AssignmentStatus.OFFERED,
-      offerExpiresAt: new Date(Date.now() + 3 * 60 * 1000), // 3 minutes
+      offerExpiresAt: new Date(Date.now() + 10 * 60 * 1000), // 3 minutes
       offerRound,
       assignedAt: new Date(),
     });
 
-    // CRITICAL: Order stays PENDING until ACCEPTED
-    // Do NOT update order.status or driver.status yet
+    const savedAssignment = await this.assignmentRepo.save(assignment);
 
-    return await this.assignmentRepo.save(assignment);
+    // Update order status to OFFERED - use .update() to avoid cascading to eager-loaded assignment
+    await this.orderRepo.update(
+      { id: data.orderId },
+      { status: OrderStatus.OFFERED }
+    );
+
+    return savedAssignment;
   }
 
   /**
@@ -159,42 +169,50 @@ export class OrderAssignmentService {
   async acceptAssignment(assignmentId: string): Promise<OrderAssignment> {
     const assignment = await this.assignmentRepo.findOne({
       where: { id: assignmentId },
-      relations: ['order', 'driver'],
+      relations: ["order", "driver"],
     });
 
     if (!assignment) {
-      throw new Error('Assignment not found');
+      throw new Error("Assignment not found");
     }
 
     // Validate state transition
     if (assignment.status !== AssignmentStatus.OFFERED) {
-      throw new Error(`Cannot accept assignment with status: ${assignment.status}`);
+      throw new Error(
+        `Cannot accept assignment with status: ${assignment.status}`
+      );
     }
 
     // Check expiration
     if (assignment.offerExpiresAt && new Date() > assignment.offerExpiresAt) {
-      throw new Error('Offer has expired');
+      throw new Error("Offer has expired");
     }
 
-    // Atomic transition using transaction
-    await this.assignmentRepo.manager.transaction(async (manager) => {
-      // Update assignment
-      assignment.status = AssignmentStatus.ACCEPTED;
-      assignment.respondedAt = new Date();
-      await manager.save(assignment);
-
-      // Update order status
-      if (assignment.order) {
-        assignment.order.status = OrderStatus.ASSIGNED;
-        await manager.save(assignment.order);
+    // Update assignment - use .update() to avoid null FK constraint issues
+    await this.assignmentRepo.update(
+      { id: assignmentId },
+      {
+        status: AssignmentStatus.ACCEPTED,
+        respondedAt: new Date(),
       }
+    );
 
-      // Update driver status if this is their first order
-      if (assignment.driver && assignment.driver.status === DriverStatus.AVAILABLE) {
-        assignment.driver.status = DriverStatus.EN_ROUTE_PICKUP;
-        await manager.save(assignment.driver);
-      }
-    });
+    // Update order status - use .update() to avoid cascading to eager-loaded assignment
+    if (assignment.order) {
+      await this.orderRepo.update(
+        { id: assignment.order.id },
+        { status: OrderStatus.ASSIGNED }
+      );
+    }
+
+    // Update driver status if this is their first order
+    if (
+      assignment.driver &&
+      assignment.driver.status === DriverStatus.AVAILABLE
+    ) {
+      assignment.driver.status = DriverStatus.EN_ROUTE_PICKUP;
+      await this.driverRepo.save(assignment.driver);
+    }
 
     return assignment;
   }
@@ -202,44 +220,56 @@ export class OrderAssignmentService {
   /**
    * Reject an OFFERED assignment
    * Updates order back to PENDING and adds driver to rejectedDriverIds
+   * Automatically triggers matching to find alternative driver
    */
-  async rejectAssignment(
-    assignmentId: string,
-    reason?: string
-  ): Promise<void> {
+  async rejectAssignment(assignmentId: string, reason?: string): Promise<void> {
     const assignment = await this.assignmentRepo.findOne({
       where: { id: assignmentId },
-      relations: ['order'],
+      relations: ["order"],
     });
 
     if (!assignment) {
-      throw new Error('Assignment not found');
+      throw new Error("Assignment not found");
     }
 
     if (assignment.status !== AssignmentStatus.OFFERED) {
-      throw new Error(`Cannot reject assignment with status: ${assignment.status}`);
+      throw new Error(
+        `Cannot reject assignment with status: ${assignment.status}`
+      );
     }
 
-    await this.assignmentRepo.manager.transaction(async (manager) => {
-      // Update assignment
-      assignment.status = AssignmentStatus.REJECTED;
-      assignment.rejectionReason = reason || undefined;
-      assignment.respondedAt = new Date();
-      await manager.save(assignment);
-
-      // Update order with priority boost
-      if (assignment.order) {
-        const order = assignment.order;
-        order.rejectedDriverIds = [
-          ...order.rejectedDriverIds,
-          assignment.driverId,
-        ];
-        order.rejectionCount += 1;
-        order.priorityMultiplier += 0.2; // +20% priority boost
-        order.status = OrderStatus.PENDING; // Ready for re-draft
-        await manager.save(order);
+    // Update assignment - use .update() to avoid null FK constraint issues
+    await this.assignmentRepo.update(
+      { id: assignmentId },
+      {
+        status: AssignmentStatus.REJECTED,
+        rejectionReason: reason || undefined,
+        respondedAt: new Date(),
       }
-    });
+    );
+
+    // Update order with priority boost - use .update() to avoid cascading to eager-loaded assignment
+    if (assignment.order) {
+      const order = assignment.order;
+      await this.orderRepo.update(
+        { id: order.id },
+        {
+          rejectedDriverIds: [...order.rejectedDriverIds, assignment.driverId],
+          rejectionCount: order.rejectionCount + 1,
+          priorityMultiplier: order.priorityMultiplier + 0.2,
+          status: OrderStatus.PENDING,
+        }
+      );
+
+      // Trigger matching engine to reassign the rejected order
+      // Run asynchronously without blocking the response
+      console.log(
+        `🔄 Order ${order.id} rejected by driver ${assignment.driverId}, triggering re-matching...`
+      );
+      await matchOrders(false).catch((error) => {
+        console.error("Error during automatic re-matching:", error);
+      });
+    }
   }
 
   /**
@@ -252,28 +282,32 @@ export class OrderAssignmentService {
         status: AssignmentStatus.OFFERED,
         offerExpiresAt: LessThan(new Date()),
       },
-      relations: ['order'],
+      relations: ["order"],
     });
 
     for (const assignment of expiredAssignments) {
-      await this.assignmentRepo.manager.transaction(async (manager) => {
-        // Mark as expired
-        assignment.status = AssignmentStatus.EXPIRED;
-        await manager.save(assignment);
+      // Mark as expired - use .update() to avoid null FK constraint issues
+      await this.assignmentRepo.update(
+        { id: assignment.id },
+        { status: AssignmentStatus.EXPIRED }
+      );
 
-        // Update order with priority boost
-        if (assignment.order) {
-          const order = assignment.order;
-          order.rejectedDriverIds = [
-            ...order.rejectedDriverIds,
-            assignment.driverId,
-          ];
-          order.rejectionCount += 1;
-          order.priorityMultiplier += 0.2; // +20% priority boost
-          order.status = OrderStatus.PENDING;
-          await manager.save(order);
-        }
-      });
+      // Update order with priority boost - use .update() to avoid cascading to eager-loaded assignment
+      if (assignment.order) {
+        const order = assignment.order;
+        await this.orderRepo.update(
+          { id: order.id },
+          {
+            rejectedDriverIds: [
+              ...order.rejectedDriverIds,
+              assignment.driverId,
+            ],
+            rejectionCount: order.rejectionCount + 1,
+            priorityMultiplier: order.priorityMultiplier + 0.2,
+            status: OrderStatus.PENDING,
+          }
+        );
+      }
     }
 
     return expiredAssignments.length;
@@ -285,22 +319,24 @@ export class OrderAssignmentService {
   async unassignOrder(orderId: string): Promise<void> {
     const assignment = await this.assignmentRepo.findOne({
       where: { orderId },
-      relations: ['order'],
+      relations: ["order"],
     });
 
     if (!assignment) {
-      throw new Error('Assignment not found');
+      throw new Error("Assignment not found");
     }
 
     // Cannot unassign if order is already picked up
     if (assignment.order && assignment.order.status === OrderStatus.PICKED_UP) {
-      throw new Error('Cannot unassign order that has been picked up');
+      throw new Error("Cannot unassign order that has been picked up");
     }
 
-    // Update order status back to pending
+    // Update order status back to pending - use .update() to avoid cascading to eager-loaded assignment
     if (assignment.order) {
-      assignment.order.status = OrderStatus.PENDING;
-      await this.orderRepo.save(assignment.order);
+      await this.orderRepo.update(
+        { id: assignment.order.id },
+        { status: OrderStatus.PENDING }
+      );
     }
 
     // Delete assignment
@@ -310,25 +346,29 @@ export class OrderAssignmentService {
   /**
    * Get assignment for an order
    */
-  async getAssignmentForOrder(orderId: string): Promise<OrderAssignment | null> {
+  async getAssignmentForOrder(
+    orderId: string
+  ): Promise<OrderAssignment | null> {
     return await this.assignmentRepo.findOne({
       where: { orderId },
-      relations: ['order', 'driver'],
+      relations: ["order", "driver"],
     });
   }
 
   /**
    * Get all active assignments for a driver
    */
-  async getActiveAssignmentsForDriver(driverId: string): Promise<OrderAssignment[]> {
+  async getActiveAssignmentsForDriver(
+    driverId: string
+  ): Promise<OrderAssignment[]> {
     return await this.assignmentRepo
-      .createQueryBuilder('assignment')
-      .innerJoinAndSelect('assignment.order', 'order')
-      .where('assignment.driverId = :driverId', { driverId })
-      .andWhere('order.status NOT IN (:...statuses)', {
+      .createQueryBuilder("assignment")
+      .innerJoinAndSelect("assignment.order", "order")
+      .where("assignment.driverId = :driverId", { driverId })
+      .andWhere("order.status NOT IN (:...statuses)", {
         statuses: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
       })
-      .orderBy('assignment.sequence', 'ASC')
+      .orderBy("assignment.sequence", "ASC")
       .getMany();
   }
 
@@ -342,39 +382,53 @@ export class OrderAssignmentService {
   ): Promise<OrderAssignment> {
     const assignment = await this.assignmentRepo.findOne({
       where: { id: assignmentId },
-      relations: ['order'],
+      relations: ["order"],
     });
 
     if (!assignment) {
-      throw new Error('Assignment not found');
+      throw new Error("Assignment not found");
     }
 
     if (actualPickup) {
-      assignment.actualPickup = actualPickup;
+      await this.assignmentRepo.update({ id: assignmentId }, { actualPickup });
       if (assignment.order) {
-        assignment.order.status = OrderStatus.PICKED_UP;
-        await this.orderRepo.save(assignment.order);
+        await this.orderRepo.update(
+          { id: assignment.order.id },
+          { status: OrderStatus.PICKED_UP }
+        );
       }
     }
 
     if (actualDelivery) {
-      assignment.actualDelivery = actualDelivery;
+      await this.assignmentRepo.update(
+        { id: assignmentId },
+        { actualDelivery }
+      );
       if (assignment.order) {
-        assignment.order.status = OrderStatus.DELIVERED;
-        await this.orderRepo.save(assignment.order);
+        await this.orderRepo.update(
+          { id: assignment.order.id },
+          { status: OrderStatus.DELIVERED }
+        );
       }
     }
 
-    return await this.assignmentRepo.save(assignment);
+    // Reload to return updated entity
+    const updated = await this.assignmentRepo.findOne({
+      where: { id: assignmentId },
+      relations: ["order"],
+    });
+    return updated!;
   }
 
   /**
    * Get assignment with full details
    */
-  async getAssignmentWithDetails(assignmentId: string): Promise<AssignmentDetails | null> {
+  async getAssignmentWithDetails(
+    assignmentId: string
+  ): Promise<AssignmentDetails | null> {
     const assignment = await this.assignmentRepo.findOne({
       where: { id: assignmentId },
-      relations: ['order', 'driver'],
+      relations: ["order", "driver"],
     });
 
     if (!assignment) {
@@ -401,9 +455,9 @@ export class OrderAssignmentService {
    */
   async getAllAssignments(limit: number = 100): Promise<OrderAssignment[]> {
     return await this.assignmentRepo.find({
-      order: { assignedAt: 'DESC' },
+      order: { assignedAt: "DESC" },
       take: limit,
-      relations: ['order', 'driver'],
+      relations: ["order", "driver"],
     });
   }
 
@@ -415,17 +469,80 @@ export class OrderAssignmentService {
     driverId: string,
     orderSequence: { orderId: string; sequence: number }[]
   ): Promise<void> {
-    const assignments = await this.assignmentRepo.find({
-      where: { driverId },
+    for (const item of orderSequence) {
+      await this.assignmentRepo.update(
+        { driverId, orderId: item.orderId },
+        { sequence: item.sequence }
+      );
+    }
+  }
+
+  /**
+   * Accept all OFFERED assignments at once (testing utility)
+   * Returns count of accepted assignments
+   */
+  async acceptAllAssignments(): Promise<number> {
+    const offeredAssignments = await this.assignmentRepo.find({
+      where: { status: AssignmentStatus.OFFERED },
+      relations: ["order", "driver"],
     });
 
-    for (const item of orderSequence) {
-      const assignment = assignments.find((a) => a.orderId === item.orderId);
-      if (assignment) {
-        assignment.sequence = item.sequence;
-        await this.assignmentRepo.save(assignment);
+    let acceptedCount = 0;
+
+    for (const assignment of offeredAssignments) {
+      try {
+        await this.acceptAssignment(assignment.id);
+        console.log(
+          `✅ Accepted assignment ${assignment.id} (Order: ${assignment.orderId}, Driver: ${assignment.driverId})`
+        );
+        acceptedCount++;
+      } catch (error) {
+        console.error(
+          `❌ Failed to accept assignment ${assignment.id}:`,
+          error instanceof Error ? error.message : error
+        );
       }
     }
+
+    console.log(
+      `\n📊 Total accepted: ${acceptedCount}/${offeredAssignments.length}`
+    );
+    return acceptedCount;
+  }
+
+  /**
+   * Reject all OFFERED assignments at once (testing utility)
+   * Returns count of rejected assignments
+   */
+  async rejectAllAssignments(
+    reason: string = "Bulk rejection for testing"
+  ): Promise<number> {
+    const offeredAssignments = await this.assignmentRepo.find({
+      where: { status: AssignmentStatus.OFFERED },
+      relations: ["order"],
+    });
+
+    let rejectedCount = 0;
+
+    for (const assignment of offeredAssignments) {
+      try {
+        await this.rejectAssignment(assignment.id, reason);
+        console.log(
+          `🚫 Rejected assignment ${assignment.id} (Order: ${assignment.orderId}, Driver: ${assignment.driverId})`
+        );
+        rejectedCount++;
+      } catch (error) {
+        console.error(
+          `❌ Failed to reject assignment ${assignment.id}:`,
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+
+    console.log(
+      `\n📊 Total rejected: ${rejectedCount}/${offeredAssignments.length}`
+    );
+    return rejectedCount;
   }
 }
 

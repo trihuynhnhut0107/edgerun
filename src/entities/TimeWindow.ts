@@ -3,7 +3,6 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  Index,
   UpdateDateColumn,
 } from 'typeorm';
 
@@ -22,10 +21,6 @@ import {
  * 2. Distributionally Robust: Uses mean+covariance, worst-case guarantee
  */
 @Entity('time_windows')
-@Index(['orderId'])
-@Index(['driverId'])
-@Index(['lowerBound', 'upperBound'])
-@Index(['calculationMethod'])
 export class TimeWindow {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

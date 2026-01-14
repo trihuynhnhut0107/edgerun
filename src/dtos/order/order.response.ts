@@ -55,4 +55,13 @@ export interface OrderResponse {
 
   /** Assigned driver ID (if assigned) */
   driverId?: string;
+
+  /** Customer ID (if order placed by registered customer) */
+  customerId?: string;
+
+  /** Estimated distance from pickup to dropoff in meters */
+  estimatedDistance?: number;
+
+  /** Estimated duration from pickup to dropoff in seconds */
+  estimatedDuration?: number;
 }

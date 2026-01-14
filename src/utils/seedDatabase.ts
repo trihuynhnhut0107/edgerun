@@ -5,8 +5,9 @@
  * Usage: npm run seed
  *
  * Creates:
+ * - 20 customers (registered users)
  * - 10 drivers with total capacity 40 (4 orders each)
- * - 30 orders distributed across Manhattan neighborhoods
+ * - 30 orders distributed across Manhattan neighborhoods (70% from registered customers, 30% anonymous)
  * - Ensures total driver capacity (40) > total orders (30)
  * - Tests algorithm with single region for debugging
  */
@@ -14,6 +15,7 @@
 import 'reflect-metadata';
 import { AppDataSource } from '../config/ormconfig';
 import { driverService } from '../services/driver/driver.service';
+import { customerService } from '../services/customer/customer.service';
 import { orderService } from '../services/order/order.service';
 import { DriverStatus } from '../enums/DriverStatus';
 import { OrderStatus } from '../enums/OrderStatus';
@@ -51,8 +53,11 @@ const seedDatabase = async () => {
     // Clean up existing data before seeding
     console.log('🧹 Cleaning up existing data...');
     const existingDrivers = await driverService.getAllDrivers();
-    if (existingDrivers.length > 0) {
+    const existingCustomers = await customerService.getAllCustomers();
+
+    if (existingDrivers.length > 0 || existingCustomers.length > 0) {
       const driverRepo = AppDataSource.getRepository('Driver');
+      const customerRepo = AppDataSource.getRepository('Customer');
       const orderRepo = AppDataSource.getRepository('Order');
       const assignmentRepo = AppDataSource.getRepository('OrderAssignment');
       const locationRepo = AppDataSource.getRepository('DriverLocation');
@@ -72,8 +77,10 @@ const seedDatabase = async () => {
       if (locations.length > 0) await locationRepo.remove(locations);
       if (orders.length > 0) await orderRepo.remove(orders);
       if (existingDrivers.length > 0) await driverRepo.remove(existingDrivers);
+      if (existingCustomers.length > 0) await customerRepo.remove(existingCustomers);
 
       console.log(`✓ Cleaned up:`);
+      console.log(`  - ${existingCustomers.length} customers`);
       console.log(`  - ${existingDrivers.length} drivers`);
       console.log(`  - ${orders.length} orders`);
       console.log(`  - ${assignments.length} order assignments`);
@@ -85,9 +92,65 @@ const seedDatabase = async () => {
     }
 
     // ===================================================================
+    // SEED CUSTOMERS (20 registered customers)
+    // ===================================================================
+    console.log('👥 Creating 20 customers...\n');
+
+    const customerNames = [
+      { first: 'John', last: 'Smith' },
+      { first: 'Sarah', last: 'Johnson' },
+      { first: 'Michael', last: 'Williams' },
+      { first: 'Emily', last: 'Brown' },
+      { first: 'Robert', last: 'Jones' },
+      { first: 'Jennifer', last: 'Garcia' },
+      { first: 'William', last: 'Miller' },
+      { first: 'Linda', last: 'Davis' },
+      { first: 'Richard', last: 'Rodriguez' },
+      { first: 'Patricia', last: 'Martinez' },
+      { first: 'Thomas', last: 'Hernandez' },
+      { first: 'Barbara', last: 'Lopez' },
+      { first: 'Daniel', last: 'Gonzalez' },
+      { first: 'Nancy', last: 'Wilson' },
+      { first: 'Joseph', last: 'Anderson' },
+      { first: 'Margaret', last: 'Thomas' },
+      { first: 'Christopher', last: 'Taylor' },
+      { first: 'Lisa', last: 'Moore' },
+      { first: 'Anthony', last: 'Jackson' },
+      { first: 'Betty', last: 'Martin' },
+    ];
+
+    const customers = [];
+    const neighborhoodKeys = Object.keys(MANHATTAN_NEIGHBORHOODS);
+
+    for (let i = 0; i < customerNames.length; i++) {
+      const { first, last } = customerNames[i];
+      const neighborhoodKey = neighborhoodKeys[i % neighborhoodKeys.length];
+      const neighborhood = MANHATTAN_NEIGHBORHOODS[neighborhoodKey as keyof typeof MANHATTAN_NEIGHBORHOODS];
+
+      const customer = await customerService.createCustomer({
+        name: `${first} ${last}`,
+        email: `${first.toLowerCase()}.${last.toLowerCase()}@example.com`,
+        phone: `+1${String(5551000 + i).padStart(10, '0')}`,
+        defaultAddress: `${300 + i} ${neighborhood.name}, Manhattan, NY 10001`,
+        defaultLocation: {
+          lat: neighborhood.lat + (Math.random() - 0.5) * 0.003,
+          lng: neighborhood.lng + (Math.random() - 0.5) * 0.003,
+        },
+      });
+
+      customers.push(customer);
+
+      if ((i + 1) % 5 === 0) {
+        console.log(`  ✓ Created ${i + 1} customers...`);
+      }
+    }
+
+    console.log(`\n  📊 Total customers: ${customers.length}`);
+
+    // ===================================================================
     // SEED DRIVERS (10 drivers, 4 orders capacity each = 40 total)
     // ===================================================================
-    console.log('📦 Creating 10 drivers in Manhattan...\n');
+    console.log('\n📦 Creating 10 drivers in Manhattan...\n');
 
     const driverNames = [
       'Alex Rivera',
@@ -142,11 +205,14 @@ const seedDatabase = async () => {
 
     // ===================================================================
     // SEED ORDERS (30 orders - less than total capacity of 40)
+    // 70% linked to customers, 30% anonymous
     // ===================================================================
     console.log('\n📦 Creating 30 orders across Manhattan...\n');
 
     const neighborhoodList = Object.keys(MANHATTAN_NEIGHBORHOODS);
     let orderCount = 0;
+    let customerOrderCount = 0;
+    let anonymousOrderCount = 0;
 
     for (let i = 0; i < 30; i++) {
       // Pick random pickup and dropoff neighborhoods
@@ -167,6 +233,10 @@ const seedDatabase = async () => {
       deliveryDate.setHours(deliveryDate.getHours() + 2); // Delivery in 2 hours
       const timeSlots = ['morning', 'afternoon', 'evening'];
 
+      // 70% of orders are from registered customers
+      const isCustomerOrder = i < 21; // First 21 orders (70%) are from customers
+      const customerId = isCustomerOrder ? customers[i % customers.length].id : undefined;
+
       const order = await orderService.createOrder({
         pickupLat,
         pickupLng,
@@ -178,6 +248,7 @@ const seedDatabase = async () => {
         preferredTimeSlot: timeSlots[i % timeSlots.length],
         priority: Math.floor(Math.random() * 10) + 1, // Priority 1-10
         value: parseFloat((Math.random() * 50 + 10).toFixed(2)), // $10-$60
+        customerId, // Link to customer if applicable
       });
 
       // Ensure order status is PENDING
@@ -186,10 +257,20 @@ const seedDatabase = async () => {
       await orderRepo.save(order);
 
       orderCount++;
+      if (isCustomerOrder) {
+        customerOrderCount++;
+      } else {
+        anonymousOrderCount++;
+      }
+
       if (orderCount % 10 === 0) {
         console.log(`  ✓ Created ${orderCount} orders...`);
       }
     }
+
+    console.log(`\n  📊 Order breakdown:`);
+    console.log(`     • Customer orders:   ${customerOrderCount}`);
+    console.log(`     • Anonymous orders:  ${anonymousOrderCount}`);
 
     // ===================================================================
     // SUMMARY
@@ -198,19 +279,25 @@ const seedDatabase = async () => {
     console.log('✓ Database seeding completed successfully!');
     console.log('═══════════════════════════════════════════════════════════\n');
     console.log('📊 Seed Summary:');
-    console.log(`   • Region:         Manhattan, New York (single region)`);
-    console.log(`   • Neighborhoods:  ${Object.keys(MANHATTAN_NEIGHBORHOODS).length} areas`);
-    console.log(`   • Drivers:        10 drivers`);
-    console.log(`   • Total capacity: ${totalCapacity} orders (4 per driver)`);
-    console.log(`   • Orders:         30 orders (PENDING)`);
-    console.log(`   • Capacity check: ✅ ${totalCapacity} capacity > 30 orders`);
-    console.log(`   • Vehicle types:  car, scooter, bike`);
-    console.log(`   • Ready for:      Draft mode testing\n`);
+    console.log(`   • Region:          Manhattan, New York (single region)`);
+    console.log(`   • Neighborhoods:   ${Object.keys(MANHATTAN_NEIGHBORHOODS).length} areas`);
+    console.log(`   • Customers:       ${customers.length} registered users`);
+    console.log(`   • Drivers:         10 drivers`);
+    console.log(`   • Total capacity:  ${totalCapacity} orders (4 per driver)`);
+    console.log(`   • Orders:          30 orders (PENDING)`);
+    console.log(`     - Customer:      ${customerOrderCount} orders (70%)`);
+    console.log(`     - Anonymous:     ${anonymousOrderCount} orders (30%)`);
+    console.log(`   • Capacity check:  ✅ ${totalCapacity} capacity > 30 orders`);
+    console.log(`   • Vehicle types:   car, scooter, bike`);
+    console.log(`   • Distance cache:  ✅ Enabled (pickup→dropoff cached on order creation)`);
+    console.log(`   • Ready for:       Draft mode testing\n`);
     console.log('💡 Next steps:');
-    console.log('   1. Start the server: npm run dev');
-    console.log('   2. Test matching:    POST /api/matching/optimize');
-    console.log('   3. Verify results:   ALL 30 orders should be assigned');
-    console.log('   4. Check logs:       Should see ALL driver-order combinations recorded\n');
+    console.log('   1. Start the server:      npm run dev');
+    console.log('   2. Test customer API:     POST /api/customers (register)');
+    console.log('   3. Test order creation:   POST /api/orders (with customerId)');
+    console.log('   4. Test matching:         POST /api/matching/optimize');
+    console.log('   5. Verify results:        ALL 30 orders should be assigned');
+    console.log('   6. Check distance cache:  Inspect distance_cache table\n');
     console.log('═══════════════════════════════════════════════════════════\n');
 
   } catch (error) {

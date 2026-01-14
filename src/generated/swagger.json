@@ -6,6 +6,176 @@
 		"requestBodies": {},
 		"responses": {},
 		"schemas": {
+			"CustomerResponse": {
+				"description": "Customer information response",
+				"properties": {
+					"id": {
+						"type": "string",
+						"description": "Unique customer identifier (UUID)"
+					},
+					"name": {
+						"type": "string",
+						"description": "Customer's full name"
+					},
+					"email": {
+						"type": "string",
+						"description": "Customer's email address"
+					},
+					"phone": {
+						"type": "string",
+						"description": "Phone number"
+					},
+					"defaultAddress": {
+						"type": "string",
+						"description": "Default delivery address"
+					},
+					"defaultLocation": {
+						"properties": {
+							"lng": {
+								"type": "number",
+								"format": "double"
+							},
+							"lat": {
+								"type": "number",
+								"format": "double"
+							}
+						},
+						"required": [
+							"lng",
+							"lat"
+						],
+						"type": "object",
+						"description": "Default location coordinates"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time",
+						"description": "Account creation timestamp"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"email",
+					"phone",
+					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"id": "550e8400-e29b-41d4-a716-446655440000",
+					"name": "Jane Smith",
+					"email": "jane@example.com",
+					"phone": "+1234567890",
+					"defaultAddress": "123 Main St, City, State 12345",
+					"createdAt": "2024-01-15T10:30:00.000Z"
+				}
+			},
+			"CreateCustomerRequest": {
+				"description": "Request body for creating a new customer (registration)",
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "Customer's full name"
+					},
+					"email": {
+						"type": "string",
+						"description": "Customer's email address (unique)"
+					},
+					"phone": {
+						"type": "string",
+						"description": "Phone number with country code (e.g., +1234567890, unique)"
+					},
+					"defaultAddress": {
+						"type": "string",
+						"description": "Default delivery address"
+					},
+					"defaultLocation": {
+						"properties": {
+							"lng": {
+								"type": "number",
+								"format": "double",
+								"description": "Longitude coordinate"
+							},
+							"lat": {
+								"type": "number",
+								"format": "double",
+								"description": "Latitude coordinate"
+							}
+						},
+						"required": [
+							"lng",
+							"lat"
+						],
+						"type": "object",
+						"description": "Default GPS location"
+					}
+				},
+				"required": [
+					"name",
+					"email",
+					"phone"
+				],
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"name": "Jane Smith",
+					"email": "jane@example.com",
+					"phone": "+1234567890",
+					"defaultAddress": "123 Main St, City, State 12345",
+					"defaultLocation": {
+						"lat": 37.7749,
+						"lng": -122.4194
+					}
+				}
+			},
+			"UpdateCustomerRequest": {
+				"description": "Request body for updating customer information",
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "Customer's full name"
+					},
+					"email": {
+						"type": "string",
+						"description": "Customer's email address"
+					},
+					"phone": {
+						"type": "string",
+						"description": "Phone number with country code"
+					},
+					"defaultAddress": {
+						"type": "string",
+						"description": "Default delivery address"
+					},
+					"defaultLocation": {
+						"properties": {
+							"lng": {
+								"type": "number",
+								"format": "double",
+								"description": "Longitude coordinate"
+							},
+							"lat": {
+								"type": "number",
+								"format": "double",
+								"description": "Latitude coordinate"
+							}
+						},
+						"required": [
+							"lng",
+							"lat"
+						],
+						"type": "object",
+						"description": "Default GPS location"
+					}
+				},
+				"type": "object",
+				"additionalProperties": false,
+				"example": {
+					"name": "Jane Smith Updated",
+					"defaultAddress": "456 New St, City, State 54321"
+				}
+			},
 			"DriverResponse": {
 				"description": "Driver information response",
 				"properties": {
@@ -239,8 +409,81 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"RouteStop": {
+				"description": "Individual stop in the route (pickup or delivery)",
+				"properties": {
+					"stopIndex": {
+						"type": "number",
+						"format": "double"
+					},
+					"orderId": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"pickup",
+							"delivery"
+						]
+					},
+					"lat": {
+						"type": "number",
+						"format": "double"
+					},
+					"lng": {
+						"type": "number",
+						"format": "double"
+					},
+					"address": {
+						"type": "string"
+					},
+					"distanceFromPrevious": {
+						"type": "number",
+						"format": "double"
+					},
+					"durationFromPrevious": {
+						"type": "number",
+						"format": "double"
+					},
+					"durationFromPreviousFormatted": {
+						"type": "string"
+					},
+					"estimatedArrival": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"cumulativeDistance": {
+						"type": "number",
+						"format": "double"
+					},
+					"cumulativeTime": {
+						"type": "number",
+						"format": "double"
+					},
+					"cumulativeTimeFormatted": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"stopIndex",
+					"orderId",
+					"type",
+					"lat",
+					"lng",
+					"address",
+					"distanceFromPrevious",
+					"durationFromPrevious",
+					"durationFromPreviousFormatted",
+					"estimatedArrival",
+					"cumulativeDistance",
+					"cumulativeTime",
+					"cumulativeTimeFormatted"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"DriverRouteResponse": {
-				"description": "Driver route response with all assigned orders",
+				"description": "Driver route response with optimized stop sequence",
 				"properties": {
 					"driverId": {
 						"type": "string"
@@ -255,11 +498,37 @@
 						"type": "number",
 						"format": "double"
 					},
+					"totalStops": {
+						"type": "number",
+						"format": "double"
+					},
+					"currentLoad": {
+						"type": "number",
+						"format": "double"
+					},
+					"maxCapacity": {
+						"type": "number",
+						"format": "double"
+					},
 					"assignments": {
 						"items": {
 							"$ref": "#/components/schemas/RouteAssignment"
 						},
 						"type": "array"
+					},
+					"stops": {
+						"items": {
+							"$ref": "#/components/schemas/RouteStop"
+						},
+						"type": "array"
+					},
+					"totalDistance": {
+						"type": "number",
+						"format": "double"
+					},
+					"estimatedDuration": {
+						"type": "number",
+						"format": "double"
 					}
 				},
 				"required": [
@@ -267,7 +536,13 @@
 					"driverName",
 					"driverStatus",
 					"totalAssignments",
-					"assignments"
+					"totalStops",
+					"currentLoad",
+					"maxCapacity",
+					"assignments",
+					"stops",
+					"totalDistance",
+					"estimatedDuration"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -424,6 +699,20 @@
 					"driverId": {
 						"type": "string",
 						"description": "Assigned driver ID (if assigned)"
+					},
+					"customerId": {
+						"type": "string",
+						"description": "Customer ID (if order placed by registered customer)"
+					},
+					"estimatedDistance": {
+						"type": "number",
+						"format": "double",
+						"description": "Estimated distance from pickup to dropoff in meters"
+					},
+					"estimatedDuration": {
+						"type": "number",
+						"format": "double",
+						"description": "Estimated duration from pickup to dropoff in seconds"
 					}
 				},
 				"required": [
@@ -533,6 +822,10 @@
 						"type": "number",
 						"format": "double",
 						"description": "Order value in dollars (for revenue tracking)"
+					},
+					"customerId": {
+						"type": "string",
+						"description": "Customer ID (optional - for registered customers)"
 					}
 				},
 				"required": [
@@ -579,6 +872,347 @@
 	},
 	"openapi": "3.0.0",
 	"paths": {
+		"/customers": {
+			"post": {
+				"operationId": "RegisterCustomer",
+				"responses": {
+					"200": {
+						"description": "Created customer information",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerResponse"
+								}
+							}
+						}
+					},
+					"201": {
+						"description": "Customer created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Validation error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "Email or phone already registered",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Register a new customer",
+				"tags": [
+					"Customers"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"description": "Customer registration data",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateCustomerRequest",
+								"description": "Customer registration data"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customers/{id}": {
+			"get": {
+				"operationId": "GetCustomer",
+				"responses": {
+					"200": {
+						"description": "Customer information",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerResponse"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Customer not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Get customer by ID",
+				"tags": [
+					"Customers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Customer ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			},
+			"put": {
+				"operationId": "UpdateCustomer",
+				"responses": {
+					"200": {
+						"description": "Updated customer information",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerResponse"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Customer not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "Email or phone already registered",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Update customer information",
+				"tags": [
+					"Customers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Customer ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Updated customer data",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateCustomerRequest",
+								"description": "Updated customer data"
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"operationId": "DeleteCustomer",
+				"responses": {
+					"200": {
+						"description": "Success message",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Cannot delete customer with orders",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Customer not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Delete customer (admin only)",
+				"tags": [
+					"Customers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Customer ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/customers/email/{email}": {
+			"get": {
+				"operationId": "GetCustomerByEmail",
+				"responses": {
+					"200": {
+						"description": "Customer information",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerResponse"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Customer not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"error"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Get customer by email",
+				"tags": [
+					"Customers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Customer email address",
+						"in": "path",
+						"name": "email",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
 		"/drivers": {
 			"post": {
 				"operationId": "CreateDriver",
@@ -1000,7 +1634,7 @@
 				"operationId": "GetDriverRoute",
 				"responses": {
 					"200": {
-						"description": "DriverRouteResponse with all assignments and order details",
+						"description": "DriverRouteResponse with optimized stop sequence",
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1028,7 +1662,7 @@
 						}
 					}
 				},
-				"description": "Get the current delivery route for a driver\nReturns all active (non-delivered) orders assigned to the driver in sequence order",
+				"description": "Get the current delivery route for a driver\nReturns optimized stop sequence (pickups & deliveries) respecting capacity constraints",
 				"tags": [
 					"Drivers"
 				],
@@ -1116,226 +1750,6 @@
 				]
 			}
 		},
-		"/matching/draft": {
-			"post": {
-				"operationId": "TriggerDraft",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"properties": {
-										"count": {
-											"type": "number",
-											"format": "double"
-										},
-										"drafts": {
-											"items": {},
-											"type": "array"
-										},
-										"success": {
-											"type": "boolean"
-										}
-									},
-									"required": [
-										"count",
-										"drafts",
-										"success"
-									],
-									"type": "object"
-								}
-							}
-						}
-					}
-				},
-				"description": "TESTING: Manual draft trigger\nRuns Phase 1 (Draft) of the assignment lifecycle",
-				"tags": [
-					"Matching Engine"
-				],
-				"security": [],
-				"parameters": [
-					{
-						"in": "query",
-						"name": "round",
-						"required": false,
-						"schema": {
-							"default": 1,
-							"format": "double",
-							"type": "number"
-						}
-					}
-				]
-			}
-		},
-		"/matching/offer": {
-			"post": {
-				"operationId": "TriggerOffer",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"properties": {
-										"message": {
-											"type": "string"
-										},
-										"created": {
-											"type": "number",
-											"format": "double"
-										},
-										"success": {
-											"type": "boolean"
-										}
-									},
-									"required": [
-										"message",
-										"created",
-										"success"
-									],
-									"type": "object"
-								}
-							}
-						}
-					}
-				},
-				"description": "TESTING: Manual offer trigger\nRuns Phase 2 (Offer) - persists last draft as OFFERED assignments",
-				"tags": [
-					"Matching Engine"
-				],
-				"security": [],
-				"parameters": [
-					{
-						"in": "query",
-						"name": "round",
-						"required": false,
-						"schema": {
-							"default": 1,
-							"format": "double",
-							"type": "number"
-						}
-					}
-				]
-			}
-		},
-		"/matching/process": {
-			"post": {
-				"operationId": "TriggerProcess",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"properties": {
-										"expired": {
-											"type": "number",
-											"format": "double"
-										},
-										"rejected": {
-											"type": "number",
-											"format": "double"
-										},
-										"accepted": {
-											"type": "number",
-											"format": "double"
-										},
-										"success": {
-											"type": "boolean"
-										}
-									},
-									"required": [
-										"expired",
-										"rejected",
-										"accepted",
-										"success"
-									],
-									"type": "object"
-								}
-							}
-						}
-					}
-				},
-				"description": "TESTING: Manual process trigger\nRuns Phase 4 (Process) - expires stale offers and collects responses",
-				"tags": [
-					"Matching Engine"
-				],
-				"security": [],
-				"parameters": []
-			}
-		},
-		"/matching/expire-stale": {
-			"post": {
-				"operationId": "ExpireStale",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"properties": {
-										"expired": {
-											"type": "number",
-											"format": "double"
-										},
-										"success": {
-											"type": "boolean"
-										}
-									},
-									"required": [
-										"expired",
-										"success"
-									],
-									"type": "object"
-								}
-							}
-						}
-					}
-				},
-				"description": "TESTING: Manual expire stale offers\nExpires all OFFERED assignments past their expiration time",
-				"tags": [
-					"Matching Engine"
-				],
-				"security": [],
-				"parameters": []
-			}
-		},
-		"/matching/cycle": {
-			"post": {
-				"operationId": "RunCycle",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"properties": {
-										"message": {
-											"type": "string"
-										},
-										"success": {
-											"type": "boolean"
-										}
-									},
-									"required": [
-										"message",
-										"success"
-									],
-									"type": "object"
-								}
-							}
-						}
-					}
-				},
-				"description": "TESTING: Run full matching cycle\nRuns the complete draft→offer loop (pauses for manual testing)",
-				"tags": [
-					"Matching Engine"
-				],
-				"security": [],
-				"parameters": []
-			}
-		},
 		"/matching/health": {
 			"get": {
 				"operationId": "HealthCheck",
@@ -1365,6 +1779,149 @@
 				],
 				"security": [],
 				"parameters": []
+			}
+		},
+		"/matching/route": {
+			"post": {
+				"operationId": "GetRoute",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"profile": {
+										"type": "string"
+									},
+									"coordinates": {
+										"items": {
+											"items": {
+												"type": "number",
+												"format": "double"
+											},
+											"type": "array"
+										},
+										"type": "array"
+									}
+								},
+								"required": [
+									"coordinates"
+								],
+								"type": "object"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/matching/accept-all": {
+			"post": {
+				"operationId": "AcceptAll",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"acceptedCount": {
+											"type": "number",
+											"format": "double"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"acceptedCount",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Accept all OFFERED assignments (testing utility)",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/matching/reject-all": {
+			"post": {
+				"operationId": "RejectAll",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"rejectedCount": {
+											"type": "number",
+											"format": "double"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"rejectedCount",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Reject all OFFERED assignments (testing utility)",
+				"tags": [
+					"Matching Engine"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": false,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"reason": {
+										"type": "string"
+									}
+								},
+								"type": "object"
+							}
+						}
+					}
+				}
 			}
 		},
 		"/orders": {
