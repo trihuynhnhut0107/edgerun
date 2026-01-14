@@ -116,7 +116,6 @@ export async function setupTestDatabase(
       requestedDeliveryDate: deliveryDate,
       preferredTimeSlot: timeSlots[Math.floor(Math.random() * timeSlots.length)],
       priority: Math.floor(Math.random() * 10) + 1,
-      value: Math.random() * 50 + 10,
     });
 
     orders.push(order);

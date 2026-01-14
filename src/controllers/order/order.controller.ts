@@ -2,6 +2,7 @@ import { Controller, Post, Get, Route, Body, Path, Response, Tags } from 'tsoa';
 import { orderService } from '../../services/order/order.service';
 import { CreateOrderRequest } from '../../dtos/order/create-order.request';
 import { OrderResponse } from '../../dtos/order/order.response';
+import { formatDistance, formatDuration, formatRoute } from '../../utils/formatters';
 
 @Route('orders')
 @Tags('Orders')
@@ -19,7 +20,6 @@ export class OrderController extends Controller {
       requestedDeliveryDate: new Date(body.requestedDeliveryDate),
       preferredTimeSlot: body.preferredTimeSlot,
       priority: body.priority,
-      value: body.value,
       customerId: body.customerId,
     });
 
@@ -56,6 +56,11 @@ export class OrderController extends Controller {
       customerId: order.customerId,
       estimatedDistance: order.estimatedDistance,
       estimatedDuration: order.estimatedDuration,
+      estimatedDistanceFormatted: order.estimatedDistance ? formatDistance(order.estimatedDistance) : undefined,
+      estimatedDurationFormatted: order.estimatedDuration ? formatDuration(order.estimatedDuration) : undefined,
+      routeSummary: order.estimatedDistance && order.estimatedDuration
+        ? formatRoute(order.estimatedDistance, order.estimatedDuration)
+        : undefined,
     };
   }
 
@@ -90,6 +95,11 @@ export class OrderController extends Controller {
       customerId: order.customerId,
       estimatedDistance: order.estimatedDistance,
       estimatedDuration: order.estimatedDuration,
+      estimatedDistanceFormatted: order.estimatedDistance ? formatDistance(order.estimatedDistance) : undefined,
+      estimatedDurationFormatted: order.estimatedDuration ? formatDuration(order.estimatedDuration) : undefined,
+      routeSummary: order.estimatedDistance && order.estimatedDuration
+        ? formatRoute(order.estimatedDistance, order.estimatedDuration)
+        : undefined,
     };
   }
 }

@@ -64,4 +64,13 @@ export interface OrderResponse {
 
   /** Estimated duration from pickup to dropoff in seconds */
   estimatedDuration?: number;
+
+  /** Human-readable distance (e.g., "2.5 km") */
+  estimatedDistanceFormatted?: string;
+
+  /** Human-readable duration (e.g., "15 min") */
+  estimatedDurationFormatted?: string;
+
+  /** Human-readable route summary (e.g., "2.5 km • 15 min") */
+  routeSummary?: string;
 }

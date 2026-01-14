@@ -19,13 +19,16 @@ import {
 import { matchOrders } from "../../services/matching/matchingEngine";
 import { getDistance } from "../../services/routing/mapboxClient";
 import { orderAssignmentService } from "../../services/assignment/order-assignment.service";
+import { formatDistance } from "../../utils/formatters";
 
 interface RouteInfo {
   driverId: string;
   driverName: string;
   orderCount: number;
   totalDistance: number;
+  totalDistanceFormatted: string;
   distancePerOrder: number;
+  distancePerOrderFormatted: string;
 }
 
 interface MatchingResponse {
@@ -37,7 +40,9 @@ interface MatchingResponse {
     totalOrders: number;
     totalAssigned: number;
     totalDistance: number;
+    totalDistanceFormatted: string;
     computationTimeMs: number;
+    computationTimeFormatted: string;
     timestamp: string;
   };
 }
@@ -63,10 +68,9 @@ export class MatchingController extends Controller {
   async optimizeMatching(
     @Query() verbose: boolean = false
   ): Promise<MatchingResponse> {
-    console.log("📍 API: Optimize matching request received");
     const startTime = Date.now();
 
-    const routes = await matchOrders(false);
+    const routes = await matchOrders();
 
     const totalDistance = routes.reduce((sum, r) => sum + r.totalDistance, 0);
     const totalOrders = routes.reduce(
@@ -87,14 +91,18 @@ export class MatchingController extends Controller {
         driverName: r.driverName,
         orderCount: r.metrics.orderCount,
         totalDistance: r.totalDistance,
+        totalDistanceFormatted: formatDistance(r.totalDistance),
         distancePerOrder: r.metrics.distancePerOrder,
+        distancePerOrderFormatted: formatDistance(r.metrics.distancePerOrder),
       })),
       summary: {
         totalRoutes: routes.length,
         totalOrders,
         totalAssigned: totalOrders,
         totalDistance,
+        totalDistanceFormatted: formatDistance(totalDistance),
         computationTimeMs,
+        computationTimeFormatted: `${computationTimeMs} ms`,
         timestamp: new Date().toISOString(),
       },
     };

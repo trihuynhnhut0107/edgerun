@@ -563,9 +563,15 @@
 						"type": "number",
 						"format": "double"
 					},
+					"totalDistanceFormatted": {
+						"type": "string"
+					},
 					"distancePerOrder": {
 						"type": "number",
 						"format": "double"
+					},
+					"distancePerOrderFormatted": {
+						"type": "string"
 					}
 				},
 				"required": [
@@ -573,7 +579,9 @@
 					"driverName",
 					"orderCount",
 					"totalDistance",
-					"distancePerOrder"
+					"totalDistanceFormatted",
+					"distancePerOrder",
+					"distancePerOrderFormatted"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -597,9 +605,15 @@
 							"timestamp": {
 								"type": "string"
 							},
+							"computationTimeFormatted": {
+								"type": "string"
+							},
 							"computationTimeMs": {
 								"type": "number",
 								"format": "double"
+							},
+							"totalDistanceFormatted": {
+								"type": "string"
 							},
 							"totalDistance": {
 								"type": "number",
@@ -620,7 +634,9 @@
 						},
 						"required": [
 							"timestamp",
+							"computationTimeFormatted",
 							"computationTimeMs",
+							"totalDistanceFormatted",
 							"totalDistance",
 							"totalAssigned",
 							"totalOrders",
@@ -713,6 +729,18 @@
 						"type": "number",
 						"format": "double",
 						"description": "Estimated duration from pickup to dropoff in seconds"
+					},
+					"estimatedDistanceFormatted": {
+						"type": "string",
+						"description": "Human-readable distance (e.g., \"2.5 km\")"
+					},
+					"estimatedDurationFormatted": {
+						"type": "string",
+						"description": "Human-readable duration (e.g., \"15 min\")"
+					},
+					"routeSummary": {
+						"type": "string",
+						"description": "Human-readable route summary (e.g., \"2.5 km • 15 min\")"
 					}
 				},
 				"required": [
@@ -747,19 +775,17 @@
 				}
 			},
 			"CreateOrderRequest": {
-				"description": "Request body for creating a new order\nSystem will generate optimal time window after route optimization",
+				"description": "Request body for creating a new order\nPrice is automatically calculated based on distance ($5 base + $1.50/km)",
 				"properties": {
 					"pickupLocation": {
 						"properties": {
 							"lng": {
 								"type": "number",
-								"format": "double",
-								"description": "Pickup longitude"
+								"format": "double"
 							},
 							"lat": {
 								"type": "number",
-								"format": "double",
-								"description": "Pickup latitude"
+								"format": "double"
 							}
 						},
 						"required": [
@@ -777,13 +803,11 @@
 						"properties": {
 							"lng": {
 								"type": "number",
-								"format": "double",
-								"description": "Dropoff longitude"
+								"format": "double"
 							},
 							"lat": {
 								"type": "number",
-								"format": "double",
-								"description": "Dropoff latitude"
+								"format": "double"
 							}
 						},
 						"required": [
@@ -807,7 +831,7 @@
 								"format": "date-time"
 							}
 						],
-						"description": "Requested delivery date (ISO 8601 date format: YYYY-MM-DD) - system will generate specific time window"
+						"description": "Requested delivery date (ISO 8601 date format: YYYY-MM-DD)"
 					},
 					"preferredTimeSlot": {
 						"type": "string",
@@ -817,11 +841,6 @@
 						"type": "number",
 						"format": "double",
 						"description": "Order priority (1-10, higher is more urgent, default: 5)"
-					},
-					"value": {
-						"type": "number",
-						"format": "double",
-						"description": "Order value in dollars (for revenue tracking)"
 					},
 					"customerId": {
 						"type": "string",
@@ -850,8 +869,7 @@
 					"dropoffAddress": "456 Mission St, San Francisco, CA",
 					"requestedDeliveryDate": "2024-11-17",
 					"preferredTimeSlot": "morning",
-					"priority": 5,
-					"value": 15.99
+					"priority": 5
 				}
 			}
 		},

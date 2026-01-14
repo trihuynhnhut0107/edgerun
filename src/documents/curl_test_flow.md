@@ -210,8 +210,7 @@ curl -X POST $BS/orders \
     "dropoffAddress": "West Village, Manhattan",
     "requestedDeliveryDate": "2026-01-10",
     "preferredTimeSlot": "afternoon",
-    "priority": 5,
-    "value": 150
+    "priority": 5
   }'
 ```
 
@@ -233,8 +232,7 @@ curl -X POST $BS/orders \
     "dropoffAddress": "Upper East Side, Manhattan",
     "requestedDeliveryDate": "2026-01-10",
     "preferredTimeSlot": "afternoon",
-    "priority": 5,
-    "value": 200
+    "priority": 5
   }'
 ```
 
@@ -256,8 +254,7 @@ curl -X POST $BS/orders \
     "dropoffAddress": "Times Square, Manhattan",
     "requestedDeliveryDate": "2026-01-10",
     "preferredTimeSlot": "morning",
-    "priority": 8,
-    "value": 250
+    "priority": 8
   }'
 ```
 
@@ -279,8 +276,7 @@ curl -X POST $BS/orders \
     "dropoffAddress": "Tribeca, Manhattan",
     "requestedDeliveryDate": "2026-01-10",
     "preferredTimeSlot": "evening",
-    "priority": 3,
-    "value": 120
+    "priority": 3
   }'
 ```
 
@@ -352,8 +348,7 @@ curl -X POST $BS/orders \
     "dropoffAddress": "Central Park, Manhattan",
     "requestedDeliveryDate": "2026-01-10",
     "preferredTimeSlot": "afternoon",
-    "priority": 6,
-    "value": 180
+    "priority": 6
   }'
 ```
 
@@ -375,8 +370,7 @@ curl -X POST $BS/orders \
     "dropoffAddress": "Grand Central Terminal, Manhattan",
     "requestedDeliveryDate": "2026-01-10",
     "preferredTimeSlot": "morning",
-    "priority": 9,
-    "value": 300
+    "priority": 9
   }'
 ```
 

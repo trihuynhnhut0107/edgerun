@@ -7,6 +7,7 @@ import { Location } from "../../interfaces/Location";
 import { DriverWithDistance } from "../../interfaces/Driver";
 import { findDriversWithinRadius } from "../../services/geospatial/queries";
 import { orderAssignmentService } from "../assignment/order-assignment.service";
+import { formatDuration, formatDistance } from "../../utils/formatters";
 
 export interface CreateDriverDTO {
   name: string;
@@ -48,7 +49,9 @@ export interface RouteStop {
 export interface RouteGenerationResult {
   stops: RouteStop[];
   totalDistance: number;
+  totalDistanceFormatted: string;
   estimatedDuration: number;
+  estimatedDurationFormatted: string;
   currentLoad: number;
 }
 
@@ -103,7 +106,7 @@ export class DriverService {
       phone: data.phone,
       vehicleType: data.vehicleType,
       maxOrders: data.maxOrders || 3,
-      status: DriverStatus.OFFLINE,
+      status: DriverStatus.AVAILABLE,
     });
 
     const savedDriver = await this.driverRepo.save(driver);
@@ -353,24 +356,6 @@ export class DriverService {
     let cumulativeDistance = 0;
     let cumulativeTime = 0;
 
-    // Helper function to format seconds to human-readable time
-    const formatDuration = (seconds: number): string => {
-      if (seconds < 60) {
-        return `${Math.round(seconds)} sec`;
-      }
-
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      const secs = Math.round(seconds % 60);
-
-      const parts: string[] = [];
-      if (hours > 0) parts.push(`${hours}h`);
-      if (minutes > 0) parts.push(`${minutes}min`);
-      if (secs > 0 && hours === 0) parts.push(`${secs}sec`);
-
-      return parts.join(" ") || "0 sec";
-    };
-
     // Create all possible stops
     interface PendingStop {
       orderId: string;
@@ -412,7 +397,9 @@ export class DriverService {
       return {
         stops: [],
         totalDistance: 0,
+        totalDistanceFormatted: "0 m",
         estimatedDuration: 0,
+        estimatedDurationFormatted: "0 sec",
         currentLoad: 0,
       };
     }
@@ -508,7 +495,9 @@ export class DriverService {
     return {
       stops,
       totalDistance: cumulativeDistance,
+      totalDistanceFormatted: formatDistance(cumulativeDistance),
       estimatedDuration: cumulativeTime,
+      estimatedDurationFormatted: formatDuration(cumulativeTime),
       currentLoad: finalLoad,
     };
   }

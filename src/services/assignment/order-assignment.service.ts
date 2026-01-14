@@ -7,6 +7,7 @@ import { DriverStatus } from "../../enums/DriverStatus";
 import { AssignmentStatus } from "../../enums/AssignmentStatus";
 import { LessThan } from "typeorm";
 import { matchOrders } from "../matching/matchingEngine";
+import { formatDuration, formatTime, formatTimeWindow } from "../../utils/formatters";
 
 export interface TimeWindowData {
   lowerBound: Date;
@@ -263,12 +264,7 @@ export class OrderAssignmentService {
 
       // Trigger matching engine to reassign the rejected order
       // Run asynchronously without blocking the response
-      console.log(
-        `🔄 Order ${order.id} rejected by driver ${assignment.driverId}, triggering re-matching...`
-      );
-      await matchOrders(false).catch((error) => {
-        console.error("Error during automatic re-matching:", error);
-      });
+      await matchOrders().catch(() => {});
     }
   }
 

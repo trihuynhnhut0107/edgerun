@@ -246,9 +246,8 @@ const seedDatabase = async () => {
         dropoffAddress: `${200 + i} ${dropoffLocation.name}, Manhattan, NY`,
         requestedDeliveryDate: deliveryDate,
         preferredTimeSlot: timeSlots[i % timeSlots.length],
-        priority: Math.floor(Math.random() * 10) + 1, // Priority 1-10
-        value: parseFloat((Math.random() * 50 + 10).toFixed(2)), // $10-$60
-        customerId, // Link to customer if applicable
+        priority: Math.floor(Math.random() * 10) + 1,
+        customerId,
       });
 
       // Ensure order status is PENDING

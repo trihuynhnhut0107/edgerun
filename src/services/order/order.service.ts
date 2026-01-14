@@ -16,7 +16,6 @@ export interface CreateOrderDTO {
   requestedDeliveryDate: Date;
   preferredTimeSlot?: string;
   priority?: number;
-  value?: number;
   customerId?: string;
 }
 
@@ -51,15 +50,19 @@ export class OrderService {
       );
       estimatedDistance = distanceResult.distance;
       estimatedDuration = distanceResult.duration;
-    } catch (error) {
-      // Log error but don't fail order creation if distance calculation fails
-      console.error("Failed to calculate distance for order:", error);
+    } catch {
+      // Distance calculation failed - price will use minimum
     }
 
+    // Calculate order price based on distance
+    // Pricing: $5 base + $1.50 per km
+    const BASE_PRICE = 5.0;
+    const PRICE_PER_KM = 1.5;
+    const distanceKm = estimatedDistance ? estimatedDistance / 1000 : 0;
+    const calculatedPrice = BASE_PRICE + distanceKm * PRICE_PER_KM;
+
     const order = this.orderRepo.create({
-      // Customer relationship
       customerId: data.customerId,
-      // Convert lat/lng to PostGIS Point geometry (GeoJSON format: [lng, lat])
       pickupLocation: {
         type: "Point",
         coordinates: [data.pickupLng, data.pickupLat],
@@ -74,19 +77,16 @@ export class OrderService {
       preferredTimeSlot: data.preferredTimeSlot,
       status: OrderStatus.PENDING,
       priority: data.priority || 5,
-      value: data.value || 0,
-      // Distance cache
+      value: Math.round(calculatedPrice * 100) / 100,
       estimatedDistance,
       estimatedDuration,
     });
 
     const savedOrder = await this.orderRepo.save(order);
 
-    // Trigger matching engine to assign new order to drivers immediately
-    // Runs asynchronously without blocking the response
-    await matchOrders(false).catch((error) => {
-      console.error("Failed to trigger matching after order creation:", error);
-    });
+    // // Trigger matching engine to assign new order to drivers immediately
+    // // Runs asynchronously without blocking the response
+    // await matchOrders().catch(() => {});
 
     return savedOrder;
   }
