@@ -7,7 +7,11 @@ import { DriverStatus } from "../../enums/DriverStatus";
 import { AssignmentStatus } from "../../enums/AssignmentStatus";
 import { LessThan } from "typeorm";
 import { matchOrders } from "../matching/matchingEngine";
-import { formatDuration, formatTime, formatTimeWindow } from "../../utils/formatters";
+import {
+  formatDuration,
+  formatTime,
+  formatTimeWindow,
+} from "../../utils/formatters";
 
 export interface TimeWindowData {
   lowerBound: Date;

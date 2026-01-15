@@ -23,6 +23,7 @@ import { distanceCacheService } from "../routing/distanceCacheService";
 import { orderAssignmentService } from "../assignment/order-assignment.service";
 import { draftService } from "./draftService";
 import { DraftGroup } from "../../entities/DraftGroup";
+import { DraftAssignment } from "../../entities/DraftAssignment";
 
 /**
  * DriverWithLocation: Driver entity with current GPS location
@@ -94,13 +95,26 @@ export interface OptimizedRoute {
 export async function matchOrders(): Promise<OptimizedRoute[]> {
   const orderRepo = AppDataSource.getRepository(Order);
   const driverRepo = AppDataSource.getRepository(Driver);
+  const draftAssignmentRepo = AppDataSource.getRepository(DraftAssignment);
+  const draftGroupRepo = AppDataSource.getRepository(DraftGroup);
+
+  // Clear previous draft data before generating new matches
+  // Delete assignments first (child), then groups (parent) to respect FK constraints
+  const allAssignments = await draftAssignmentRepo.find();
+  if (allAssignments.length > 0) {
+    await draftAssignmentRepo.remove(allAssignments);
+  }
+  const allGroups = await draftGroupRepo.find();
+  if (allGroups.length > 0) {
+    await draftGroupRepo.remove(allGroups);
+  }
 
   const pendingOrders = await orderRepo.find({
-    where: [{ status: OrderStatus.PENDING }],
+    where: [{ status: OrderStatus.PENDING }, { status: OrderStatus.OFFERED }],
     order: { priority: "DESC", createdAt: "ASC" },
   });
 
-  const availableDrivers = await driverRepo.find({
+  let availableDrivers = await driverRepo.find({
     where: [
       { status: DriverStatus.AVAILABLE },
       { status: DriverStatus.EN_ROUTE_PICKUP },
@@ -109,6 +123,42 @@ export async function matchOrders(): Promise<OptimizedRoute[]> {
 
   if (pendingOrders.length === 0 || availableDrivers.length === 0) {
     return [];
+  }
+
+  // Check if any orders have rejections
+  const hasRejections = pendingOrders.some(
+    (o) => o.rejectedDriverIds.length > 0
+  );
+  if (hasRejections) {
+    console.log("\n⚠️  Rejection filtering active:");
+    // Create filtered order list that only includes orders without all drivers rejected
+    const validOrders = pendingOrders.filter((order) => {
+      const rejectedCount = order.rejectedDriverIds.length;
+      const availableCount = availableDrivers.filter(
+        (d) => !order.rejectedDriverIds.includes(d.id)
+      ).length;
+
+      if (availableCount === 0) {
+        console.log(
+          `   ❌ Order ${order.id.slice(0, 8)}: All ${availableDrivers.length} drivers have rejected`
+        );
+        return false;
+      }
+
+      if (rejectedCount > 0) {
+        console.log(
+          `   🔄 Order ${order.id.slice(0, 8)}: ${rejectedCount} rejection(s), ${availableCount} driver(s) available`
+        );
+      }
+      return true;
+    });
+
+    if (validOrders.length === 0) {
+      console.log(
+        "   ⚠️  No orders can be assigned (all drivers rejected all orders)\n"
+      );
+      return [];
+    }
   }
 
   const bestDraftGroup = await draftService.generateDraftGroups(
@@ -176,6 +226,31 @@ async function createOrderAssignmentsFromDraft(
 ): Promise<number> {
   const assignments = draftGroup.assignments || [];
   const assignmentRepo = AppDataSource.getRepository(OrderAssignment);
+  const orderRepo = AppDataSource.getRepository(Order);
+
+  // Clear all OFFERED assignments before persisting new ones
+  // This ensures route recalculation updates all sequences and travel times correctly
+  const existingOffered = await assignmentRepo.find({
+    where: { status: AssignmentStatus.OFFERED },
+  });
+
+  if (existingOffered.length > 0) {
+    console.log(
+      `🔄 Clearing ${existingOffered.length} existing OFFERED assignments for route recalculation`
+    );
+
+    // Update orders back to PENDING before deleting assignments
+    for (const existing of existingOffered) {
+      await orderRepo.update(
+        { id: existing.orderId },
+        { status: OrderStatus.PENDING }
+      );
+    }
+
+    // Delete old assignments
+    await assignmentRepo.remove(existingOffered);
+  }
+
   let created = 0;
 
   for (const draftAssignment of assignments) {
@@ -183,6 +258,18 @@ async function createOrderAssignmentsFromDraft(
     const driverId = draftAssignment.driverId || draftAssignment.driver?.id;
 
     if (!orderId || !driverId) {
+      console.warn(
+        `Skipping draft assignment with missing IDs: orderId=${orderId}, driverId=${driverId}`
+      );
+      continue;
+    }
+
+    // Validate that this driver hasn't rejected this order
+    const order = await orderRepo.findOne({ where: { id: orderId } });
+    if (order && order.rejectedDriverIds.includes(driverId)) {
+      console.warn(
+        `⚠️  Skipping assignment: Driver ${driverId.slice(0, 8)} previously rejected order ${orderId.slice(0, 8)}`
+      );
       continue;
     }
 

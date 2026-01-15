@@ -10,6 +10,7 @@ This document provides a step-by-step guide to testing the full flow of the Edge
 ## Automatic Matching Behavior
 
 The matching engine runs automatically in the following scenarios:
+
 - **New Order Created**: When a new order is created, the system automatically runs matching to find suitable drivers
 - **Driver Status Changed**: When a driver's status changes to "available", matching runs to assign pending orders
 - **Assignment Rejected**: When a driver rejects an assignment, the system automatically tries to reassign to another driver
@@ -103,7 +104,7 @@ curl -X POST $BS/drivers \
     "name": "Manhattan Driver",
     "phone": "+12125550199",
     "vehicleType": "bike",
-    "maxOrders": 5,
+    "maxOrders": 2,
     "initialLocation": {
       "lat": 40.7580,
       "lng": -73.9855
@@ -120,7 +121,7 @@ curl -X POST $BS/drivers \
     "name": "Downtown Driver",
     "phone": "+12125550198",
     "vehicleType": "car",
-    "maxOrders": 8,
+    "maxOrders": 3,
     "initialLocation": {
       "lat": 40.7200,
       "lng": -74.0000
@@ -465,6 +466,7 @@ curl -X POST "$BS/matching/optimize?verbose=true"
 ```
 
 This is useful for:
+
 - Testing the matching algorithm without creating new orders
 - Forcing a re-optimization after manual changes
 - Debugging optimization behavior
@@ -489,7 +491,7 @@ curl -X GET $BS/matching/health
 4. Set Drivers to Available
    ↓
 5. Create Initial Orders (4 orders)
-   ↓ (Matching runs automatically)
+   ↓ Run matching orders endpoint
 6. Get Offered Assignments
    ↓
 7. Driver Accepts Some Assignments
